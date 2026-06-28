@@ -173,6 +173,7 @@ try { db.exec('ALTER TABLE users ADD COLUMN locked_until TEXT'); } catch {}
 try { db.exec('ALTER TABLE scanned_posts ADD COLUMN market_value REAL'); } catch {}
 try { db.exec('ALTER TABLE scanned_posts ADD COLUMN ai_explanation TEXT'); } catch {}
 try { db.exec('ALTER TABLE scanned_posts ADD COLUMN scam_score REAL'); } catch {}
+try { db.exec('ALTER TABLE scanned_posts ADD COLUMN ai_analysis TEXT'); } catch {}
 try { db.exec('ALTER TABLE scanned_posts ADD COLUMN seller_reputation INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE alert_rules ADD COLUMN min_score REAL'); } catch {}
 try { db.exec('ALTER TABLE alert_rules ADD COLUMN condition_type TEXT'); } catch {}
