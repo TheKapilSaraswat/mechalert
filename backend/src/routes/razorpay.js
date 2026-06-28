@@ -14,10 +14,7 @@ function getClient() {
   return new Razorpay({ key_id: key, key_secret: secret });
 }
 
-function getAmount(plan) {
-  if (plan === 'pro_plus') {
-    return parseInt(process.env.RAZORPAY_PROPLUS_MONTHLY) || parseInt(process.env.RAZORPAY_AMOUNT_MONTHLY) || 39900;
-  }
+function getAmount() {
   return parseInt(process.env.RAZORPAY_PRO_MONTHLY) || parseInt(process.env.RAZORPAY_AMOUNT_MONTHLY) || 19900;
 }
 
@@ -27,7 +24,7 @@ router.post('/create-order', jwtAuth, async (req, res) => {
     if (!client) return res.status(500).json({ error: 'Razorpay not configured' });
 
     const { plan } = req.body;
-    if (!plan || !['pro', 'pro_plus'].includes(plan)) {
+    if (!plan || plan !== 'pro') {
       return res.status(400).json({ error: 'Invalid plan.' });
     }
 
@@ -139,10 +136,9 @@ router.post('/verify', jwtAuth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
-    const tier = plan === 'pro_plus' ? 'pro_plus' : 'pro';
     db.prepare(
-      "UPDATE users SET is_premium = 1, tier = ?, payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
-    ).run(tier, 'razorpay', razorpay_order_id, req.user.userId);
+      "UPDATE users SET is_premium = 1, tier = 'pro', payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
+    ).run('razorpay', razorpay_order_id, req.user.userId);
     db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'completed', ?, 'razorpay')").run(req.user.userId, plan);
 
     logger.info(`User ${req.user.userId} upgraded to premium (Razorpay)`);

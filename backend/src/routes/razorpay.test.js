@@ -252,7 +252,7 @@ describe('Razorpay Routes', () => {
     }
   });
 
-  it('POST /verify succeeds with pro_plus plan', async () => {
+  it('POST /verify succeeds with pro plan', async () => {
     const orig = process.env.RAZORPAY_KEY_SECRET;
     process.env.RAZORPAY_KEY_SECRET = 'test_key_secret';
     try {
@@ -261,7 +261,7 @@ describe('Razorpay Routes', () => {
       const body = razorpay_order_id + '|' + razorpay_payment_id;
       const razorpay_signature = crypto.createHmac('sha256', 'test_key_secret').update(body).digest('hex');
       const res = mockRes();
-      await getHandler('post', '/verify')(mockReq({ body: { razorpay_payment_id, razorpay_order_id, razorpay_signature, plan: 'pro_plus' } }), res);
+      await getHandler('post', '/verify')(mockReq({ body: { razorpay_payment_id, razorpay_order_id, razorpay_signature, plan: 'pro' } }), res);
       expect(res.json).toHaveBeenCalledWith({ success: true });
     } finally {
       process.env.RAZORPAY_KEY_SECRET = orig;
@@ -294,8 +294,8 @@ describe('Razorpay Routes', () => {
     expect(mockStmt.run).toHaveBeenCalledWith('razorpay', 'order_123', 1);
   });
 
-  it('POST /webhook payment.captured with pro_plus plan', () => {
-    const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { notes: { userId: '2', plan: 'pro_plus' }, order_id: 'order_456' } } } });
+  it('POST /webhook payment.captured with pro plan', () => {
+    const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { notes: { userId: '2', plan: 'pro' }, order_id: 'order_456' } } } });
     const sig = crypto.createHmac('sha256', whsec).update(body).digest('hex');
     const res = mockRes();
     getHandler('post', '/webhook')(mockReq({ body, headers: { 'x-razorpay-signature': sig } }), res);
@@ -365,7 +365,7 @@ describe('Razorpay Routes', () => {
     }
   });
 
-  it('POST /create-order creates order with pro_plus plan (covers getAmount pro_plus branch)', async () => {
+  it('POST /create-order creates order with pro plan', async () => {
     const origKey = process.env.RAZORPAY_KEY_ID;
     const origSecret = process.env.RAZORPAY_KEY_SECRET;
     process.env.RAZORPAY_KEY_ID = 'rzp_key';
@@ -373,11 +373,11 @@ describe('Razorpay Routes', () => {
     try {
       const Razorpay = (await import('razorpay')).default;
       Razorpay.mockImplementation(() => ({
-        orders: { create: vi.fn().mockResolvedValue({ id: 'order_proplus', amount: 39900 }) },
+        orders: { create: vi.fn().mockResolvedValue({ id: 'order_pro', amount: 19900 }) },
       }));
       const res = mockRes();
-      await getHandler('post', '/create-order')(mockReq({ body: { plan: 'pro_plus' } }), res);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ order_id: 'order_proplus', plan: 'pro_plus' }));
+      await getHandler('post', '/create-order')(mockReq({ body: { plan: 'pro' } }), res);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ order_id: 'order_pro', plan: 'pro' }));
     } finally {
       process.env.RAZORPAY_KEY_ID = origKey;
       process.env.RAZORPAY_KEY_SECRET = origSecret;

@@ -263,7 +263,6 @@ export default function Dashboard() {
   const limitColor = remaining <= 0 ? 'full' : remaining === 1 ? 'low' : remaining <= FREE_LIMIT / 2 ? 'medium' : 'high';
 
   const getDefaultScanInterval = () => {
-    if (tier === 'pro_plus') return 5;
     if (tier === 'pro') return 10;
     return 180;
   };
@@ -331,14 +330,12 @@ export default function Dashboard() {
           <div style={{ fontWeight: 600, color: '#f0f6fc' }}>
             {tier === 'free' ? (
               <>Free <span style={{ color: '#8b949e', fontWeight: 400, fontSize: '0.85rem' }}>— 3 rule limit, 3h scans</span></>
-            ) : tier === 'pro' ? (
-              <>Pro ⚡{user?.payment_provider ? <span style={{ color: '#8b949e', fontWeight: 400, fontSize: '0.85rem' }}> via {providerLabels[user.payment_provider] || user.payment_provider}</span> : null}</>
             ) : (
-              <>Pro+ ⚡⚡{user?.payment_provider ? <span style={{ color: '#8b949e', fontWeight: 400, fontSize: '0.85rem' }}> via {providerLabels[user.payment_provider] || user.payment_provider}</span> : null}</>
+              <>Pro ⚡{user?.payment_provider ? <span style={{ color: '#8b949e', fontWeight: 400, fontSize: '0.85rem' }}> via {providerLabels[user.payment_provider] || user.payment_provider}</span> : null}</>
             )}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#8b949e', marginTop: 4 }}>
-            {tier === 'free' ? 'Scans every ~3h · No price filters' : tier === 'pro' ? 'Scans every ~10 min · Price filters · Price history · Collections · Digest' : 'Scans every ~2 min · Price filters · Price history · Collections · Digest · API access'}
+            {tier === 'free' ? 'Scans every ~3h · No price filters' : 'Scans every ~10 min · Price filters · Price history · Collections · Digest · API access'}
           </div>
           {unlockedAchievements.length > 0 && (
             <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -361,8 +358,6 @@ export default function Dashboard() {
           {tier === 'free' && (
             <Link to="/pricing" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Upgrade to Pro</Link>
           )}
-          {tier === 'pro' && (
-            <Link to="/pricing" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Upgrade to Pro+</Link>
           )}
         </div>
       </div>
@@ -431,7 +426,7 @@ export default function Dashboard() {
             {tab === 'dashboard' ? '📊 Dashboard' : tab === 'rules' ? '📋 Alert Rules' : tab === 'matches' ? '⚡ Matches' : '💾 Saved Deals'}
           </button>
         ))}
-        {(tier === 'pro' || tier === 'pro_plus') && (
+        {tier === 'pro' && (
           <button className={`tab-btn ${activeTab === 'settings' ? 'tab-active' : ''}`}
             onClick={() => setActiveTab('settings')}>
             ⚙️ Settings
@@ -627,15 +622,6 @@ export default function Dashboard() {
                       <option value={60}>Every 60 minutes</option>
                     </>
                   )}
-                  {tier === 'pro_plus' && (
-                    <>
-                      <option value={2}>Every 2 minutes</option>
-                      <option value={5}>Every 5 minutes</option>
-                      <option value={10}>Every 10 minutes</option>
-                      <option value={15}>Every 15 minutes</option>
-                      <option value={30}>Every 30 minutes</option>
-                      <option value={60}>Every 60 minutes</option>
-                    </>
                   )}
                 </select>
                 <p className="field-hint">How often to check for new matches</p>
@@ -711,7 +697,7 @@ export default function Dashboard() {
         <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}>Saved Deals</h3>
-        {(tier === 'pro' || tier === 'pro_plus') && (
+        {tier === 'pro' && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select value={selectedCollection || ''} onChange={e => {
               const id = e.target.value ? parseInt(e.target.value) : null;
@@ -807,14 +793,14 @@ export default function Dashboard() {
                   style={{ flex: 1, padding: '6px 10px', borderRadius: 4, border: '1px solid #30363d', background: '#0d1117', color: '#c9d1d9', fontSize: '0.85rem' }}
                 />
                 <button className="btn-sm" onClick={() => updateSavedNote(deal.id)}>Save Note</button>
-                {(tier === 'pro' || tier === 'pro_plus') && selectedCollection && (
+                {tier === 'pro' && selectedCollection && (
                   <button className="btn-sm btn-danger" onClick={async () => {
                     await api(`/collections/items/${d.id}`, { method: 'DELETE' });
                     setCollectionItems(prev => prev.filter(x => x.id !== d.id));
                     addToast('Removed from collection');
                   }} style={{ fontSize: '0.7rem' }}>Remove</button>
                 )}
-                {(tier === 'pro' || tier === 'pro_plus') && !selectedCollection && collections.length > 0 && (
+                {tier === 'pro' && !selectedCollection && collections.length > 0 && (
                   <select defaultValue="" onChange={async (e) => {
                     if (!e.target.value) return;
                     await api(`/collections/${e.target.value}/items`, { method: 'POST', body: JSON.stringify({ saved_deal_id: deal.id }) });
@@ -825,7 +811,7 @@ export default function Dashboard() {
                   </select>
                 )}
               </div>
-              {(tier === 'pro' || tier === 'pro_plus') && (
+              {tier === 'pro' && (
                 <div style={{ marginTop: 8 }}>
                   {loadingHistory[deal.post_id] ? (
                     <span style={{ fontSize: '0.75rem', color: '#8b949e' }}>Loading price history...</span>
@@ -875,8 +861,8 @@ export default function Dashboard() {
           </div>
 
           <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 8, padding: '20px' }}>
-            <h4 style={{ margin: '0 0 12px', color: '#f0f6fc' }}>🔑 API Access (Pro+)</h4>
-            {tier === 'pro_plus' ? (
+            <h4 style={{ margin: '0 0 12px', color: '#f0f6fc' }}>🔑 API Access</h4>
+            {tier === 'pro' ? (
               <>
                 <p style={{ fontSize: '0.85rem', color: '#8b949e', marginBottom: 12 }}>
                   Use your API key to fetch matches programmatically.
@@ -912,7 +898,7 @@ curl -H "x-api-key: YOUR_KEY" \
               </>
             ) : (
               <p style={{ fontSize: '0.85rem', color: '#8b949e' }}>
-                Upgrade to Pro+ for API access.
+                API access requires a Pro subscription.
               </p>
             )}
           </div>

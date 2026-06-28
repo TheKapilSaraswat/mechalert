@@ -110,11 +110,11 @@ describe('PayPal Routes', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid plan.' });
   });
 
-  it('POST /create-order works with pro_plus plan', async () => {
+  it('POST /create-order works with pro plan', async () => {
     global.fetch.mockResolvedValueOnce(mockFetchOk({ access_token: 'pp_token' }));
     global.fetch.mockResolvedValueOnce(mockFetchOk({ id: 'order_pp_456', links: [{ rel: 'payer-action', href: 'https://paypal.com/checkout/456' }] }));
     const res = mockRes();
-    await getHandler('post', '/create-order')(mockReq({ body: { plan: 'pro_plus' } }), res);
+    await getHandler('post', '/create-order')(mockReq({ body: { plan: 'pro' } }), res);
     expect(res.json).toHaveBeenCalledWith({ order_id: 'order_pp_456', approval_url: 'https://paypal.com/checkout/456' });
   });
 
@@ -171,12 +171,12 @@ describe('PayPal Routes', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Payment not completed: PENDING' });
   });
 
-  it('POST /capture-order works with pro_plus plan', async () => {
+  it('POST /capture-order works with pro plan', async () => {
     global.fetch.mockResolvedValueOnce(mockFetchOk({ access_token: 'pp_token' }));
     global.fetch.mockResolvedValueOnce(mockFetchOk({ status: 'COMPLETED' }));
     const db = (await import('../db.js')).default;
     const res = mockRes();
-    await getHandler('post', '/capture-order')(mockReq({ body: { order_id: 'order_pp', plan: 'pro_plus' } }), res);
+    await getHandler('post', '/capture-order')(mockReq({ body: { order_id: 'order_pp', plan: 'pro' } }), res);
     expect(res.json).toHaveBeenCalledWith({ success: true });
     expect(db.prepare.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
@@ -327,12 +327,12 @@ describe('PayPal Routes', () => {
     expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining('/dashboard'));
   });
 
-  it('GET /return handles pro_plus plan on return', async () => {
+  it('GET /return handles pro plan on return', async () => {
     global.fetch.mockResolvedValueOnce(mockFetchOk({ access_token: 'pp_token' }));
     global.fetch.mockResolvedValueOnce(mockFetchOk({ purchase_units: [{ custom_id: '1' }] }));
     global.fetch.mockResolvedValueOnce(mockFetchOk({ status: 'COMPLETED' }));
     const res = mockRes();
-    await getHandler('get', '/return')(mockReq({ query: { token: 'abc', userId: '1', plan: 'pro_plus' } }), res);
+    await getHandler('get', '/return')(mockReq({ query: { token: 'abc', userId: '1', plan: 'pro' } }), res);
     expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining('/dashboard'));
   });
 
@@ -390,12 +390,12 @@ describe('PayPal Routes', () => {
     expect(res.status).toHaveBeenCalledWith(500);
   });
 
-  it('POST /webhook COMPLETED with pro_plus custom_id sets pro_plus tier', async () => {
+  it('POST /webhook COMPLETED sets premium', async () => {
     global.fetch.mockResolvedValueOnce(mockFetchOk({ access_token: 'pp_token' }));
     global.fetch.mockResolvedValueOnce(mockFetchOk({ verification_status: 'SUCCESS' }));
     const db = (await import('../db.js')).default;
     const res = mockRes();
-    const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.COMPLETED', resource: { custom_id: '42_pro_plus', id: 'cap_proplus' } });
+    const body = JSON.stringify({ event_type: 'PAYMENT.CAPTURE.COMPLETED', resource: { custom_id: '42', id: 'cap_pro' } });
     await getHandler('post', '/webhook')(mockReq({
       body,
       headers: { 'paypal-auth-algo': 'SHA256', 'paypal-cert-url': 'https://api.paypal.com/cert', 'paypal-transmission-id': 'txn1', 'paypal-transmission-sig': 'sig1', 'paypal-transmission-time': '2024-01-01T00:00:00Z' },
@@ -419,14 +419,14 @@ describe('PayPal Routes', () => {
     expect(res.status).toHaveBeenCalledWith(500);
   });
 
-  it('getPrice returns custom PAYPAL_PROPLUS_MONTHLY when set', async () => {
-    process.env.PAYPAL_PROPLUS_MONTHLY = '9.99';
+  it('getPrice returns custom PAYPAL_PRO_MONTHLY env var', async () => {
+    process.env.PAYPAL_PRO_MONTHLY = '5.99';
     global.fetch.mockResolvedValueOnce(mockFetchOk({ access_token: 'pp_token' }));
-    global.fetch.mockResolvedValueOnce(mockFetchOk({ id: 'order_pp', links: [{ rel: 'payer-action', href: 'https://paypal.com/checkout/pp' }] }));
+    global.fetch.mockResolvedValueOnce(mockFetchOk({ id: 'order_pp2', links: [{ rel: 'payer-action', href: 'https://paypal.com/checkout' }] }));
     const db = (await import('../db.js')).default;
     const res = mockRes();
-    await getHandler('post', '/create-order')(mockReq({ body: { plan: 'pro_plus' } }), res);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ order_id: 'order_pp' }));
+    await getHandler('post', '/create-order')(mockReq({ body: { plan: 'pro' } }), res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ order_id: 'order_pp2' }));
   });
 
   it('getPrice returns custom PAYPAL_PRO_MONTHLY when set', async () => {

@@ -43,27 +43,6 @@ const PLANS = [
     popular: true,
     badge: 'Best Value',
   },
-  {
-    id: 'pro_plus',
-    name: 'Pro+',
-    price: '$3.99',
-    period: '/month',
-    features: [
-      'Everything in Pro',
-      'Real-time 2-minute scans',
-      'Market value estimates',
-      'Scam detection & risk scoring',
-      'API access + webhooks',
-      'Priority processing',
-      'Browser extension access',
-      'CSV data export',
-      'Premium badge',
-      'Advanced AI insights',
-    ],
-    cta: 'Subscribe',
-    popular: false,
-    badge: 'Power User',
-  },
 ];
 
 const PAYMENT_METHODS = [
@@ -105,30 +84,18 @@ export default function PricingPage() {
     document.body.appendChild(script);
   }, [paymentMethod]);
 
-  function getProAmount() {
-    if (!config) return null;
+  function getPrice(plan) {
+    if (plan.id === 'free') return 'Free';
+    if (!config) return '$2.99';
     if (paymentMethod === 'razorpay') return priceINR(config.razorpay.pro.monthly);
     return '$2.99';
   }
 
-  function getProPlusAmount() {
-    if (!config) return null;
-    if (paymentMethod === 'razorpay') return priceINR(config.razorpay.pro_plus.monthly);
-    return '$3.99';
-  }
-
-  function getPrice(plan) {
-    if (plan.id === 'free') return 'Free';
-    if (plan.id === 'pro') return getProAmount() || '$2.99';
-    return getProPlusAmount() || '$5';
-  }
-
   async function handleRazorpay(planId) {
     if (!window.Razorpay) throw new Error('Payment gateway not loaded. Please refresh.');
-    const planKey = planId === 'pro_plus' ? 'pro_plus' : 'pro';
     const orderData = await api('/razorpay/create-order', {
       method: 'POST',
-      body: JSON.stringify({ plan: planKey, email: user.email }),
+      body: JSON.stringify({ plan: 'pro', email: user.email }),
     });
 
     return new Promise((resolve, reject) => {
@@ -138,7 +105,7 @@ export default function PricingPage() {
           amount: orderData.amount,
           currency: orderData.currency,
           name: 'MechAlert',
-          description: planKey === 'pro_plus' ? 'Pro+ Monthly' : 'Pro Monthly',
+          description: 'Pro Monthly',
           prefill: { email: user.email },
           handler: async (response) => {
             try {
@@ -148,7 +115,7 @@ export default function PricingPage() {
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
-                  plan: planKey,
+                  plan: 'pro',
                 }),
               });
               navigate('/dashboard?upgrade=success');
@@ -171,11 +138,10 @@ export default function PricingPage() {
     });
   }
 
-  async function handlePayPal(planId) {
-    const planKey = planId === 'pro_plus' ? 'pro_plus' : 'pro';
+  async function handlePayPal() {
     const data = await api('/paypal/create-order', {
       method: 'POST',
-      body: JSON.stringify({ plan: planKey, email: user.email }),
+      body: JSON.stringify({ plan: 'pro', email: user.email }),
     });
     window.location.href = data.approval_url;
   }
@@ -196,7 +162,7 @@ export default function PricingPage() {
     setError(null);
     try {
       if (paymentMethod === 'razorpay') await handleRazorpay(plan.id);
-      else await handlePayPal(plan.id);
+      else await handlePayPal();
     } catch (err) {
       if (err.message !== 'Payment cancelled') setError(err.message || 'Payment failed.');
       setLoading(null);
@@ -263,8 +229,8 @@ export default function PricingPage() {
       <div className="pricing-faq">
         <h3>FAQ</h3>
         <details className="pricing-faq-item">
-          <summary>What's the difference between Pro and Pro+?</summary>
-          <p>Pro gives you unlimited alerts, all notification platforms, price tracking, and daily insights. Pro+ adds real-time 2-minute scans, market value estimates, scam detection, API access, and priority processing — built for power users who flip deals.</p>
+          <summary>What do I get with Pro?</summary>
+          <p>Pro gives you unlimited alert rules, all notification platforms (Discord, Telegram, Slack), price filters & history, daily insights, deal collections, price drop alerts, AI deal explanations, scam detection, API access, and much more.</p>
         </details>
         <details className="pricing-faq-item">
           <summary>Can I cancel anytime?</summary>

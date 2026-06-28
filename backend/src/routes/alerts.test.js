@@ -240,7 +240,7 @@ describe('Alert Routes', () => {
     const res = mockRes();
     handlers[handlers.length - 1](req, res);
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Price filters require Pro or Pro+.' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Price filters require Pro.' });
   });
 
   it('PUT /:id returns 403 when non-email notify used on free tier', async () => {
@@ -253,7 +253,7 @@ describe('Alert Routes', () => {
     const res = mockRes();
     handlers[handlers.length - 1](req, res);
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Non-email notifications require Pro or Pro+.' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Non-email notifications require Pro.' });
   });
 
   it('POST / creates rule with pro user and price filter', async () => {

@@ -60,7 +60,7 @@ router.get('/insights', jwtAuth, (req, res) => {
     const userId = req.user.userId;
     const u = db.prepare('SELECT tier, is_premium FROM users WHERE id = ?').get(userId);
     const tier = u?.tier || (u?.is_premium ? 'pro' : 'free');
-    if (tier === 'free') return res.status(403).json({ error: 'Daily insights require Pro or Pro+.' });
+    if (tier === 'free') return res.status(403).json({ error: 'Daily insights require Pro.' });
 
     const bestDeal = db.prepare(`
       SELECT sp.title, sp.price, sp.market_value, sp.deal_score, sp.permalink, sp.ai_explanation

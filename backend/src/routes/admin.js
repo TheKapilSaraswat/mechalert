@@ -12,8 +12,7 @@ router.get('/stats', adminAuth, (req, res) => {
   try {
     const totalUsers = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
     const proUsers = db.prepare("SELECT COUNT(*) as c FROM users WHERE tier = 'pro'").get().c;
-    const proPlusUsers = db.prepare("SELECT COUNT(*) as c FROM users WHERE tier = 'pro_plus'").get().c;
-    const premiumUsers = proUsers + proPlusUsers;
+    const premiumUsers = proUsers;
     const totalPosts = db.prepare('SELECT COUNT(*) as c FROM scanned_posts').get().c;
     const totalMatches = db.prepare('SELECT COUNT(*) as c FROM alert_matches').get().c;
     const totalRules = db.prepare('SELECT COUNT(*) as c FROM alert_rules').get().c;
@@ -33,7 +32,7 @@ router.get('/stats', adminAuth, (req, res) => {
     } catch {}
 
     res.json({
-      users: { total: totalUsers, premium: premiumUsers, free: totalUsers - premiumUsers, pro: proUsers, pro_plus: proPlusUsers },
+      users: { total: totalUsers, premium: premiumUsers, free: totalUsers - premiumUsers, pro: proUsers },
       content: { posts: totalPosts, matches: totalMatches, rules: totalRules, activeRules, savedDeals: totalSaved },
       activity24h: { posts: posts24h, matches: matches24h, searches: searches24h },
       bySource,

@@ -314,13 +314,13 @@ describe('scanSubreddit', () => {
     expect(sendNotification).not.toHaveBeenCalled();
   });
 
-  it('handles pro_plus tier cooldown', async () => {
+  it('handles pro tier cooldown', async () => {
     fetchReddit.mockResolvedValue({
-      data: { children: [{ data: { id: 'pp1', title: 'Pro plus item $200', selftext: '', permalink: '/r/test/pp/', author: 'u', preview: null, thumbnail: null } }] },
+      data: { children: [{ data: { id: 'pp1', title: 'Pro item $200', selftext: '', permalink: '/r/test/pp/', author: 'u', preview: null, thumbnail: null } }] },
     });
     const db = (await vi.importMock('./db.js')).default;
     const mockGet = vi.fn()
-      .mockReturnValueOnce({ cnt: 0, is_premium: 0, id: 1, keywords: 'item', min_price: null, max_price: null, last_matched_at: null, tier: 'pro_plus', is_premium: 1, user_id: 1, notify_type: 'discord', notify_target: 'https://discord.com/api/webhooks/123', scan_interval: null, subreddit: 'mechmarket' })
+      .mockReturnValueOnce({ cnt: 0, is_premium: 0, id: 1, keywords: 'item', min_price: null, max_price: null, last_matched_at: null, tier: 'pro', is_premium: 1, user_id: 1, notify_type: 'discord', notify_target: 'https://discord.com/api/webhooks/123', scan_interval: null, subreddit: 'mechmarket' })
       .mockReturnValue({ jwt_version: 1 });
     db.prepare.mockReturnValue({ run: vi.fn(() => ({ changes: 1 })), get: mockGet, all: vi.fn().mockReturnValue([]) });
     await scanSubreddit('mechmarket');
@@ -495,9 +495,9 @@ describe('scanSubreddit', () => {
     expect(sendNotification).toHaveBeenCalled();
   });
 
-  it('uses pro_plus cooldown with non-empty rules', async () => {
+  it('uses pro cooldown with non-empty rules', async () => {
     fetchReddit.mockResolvedValue({
-      data: { children: [{ data: { id: 'pp2', title: 'Pro plus item $200', selftext: '', permalink: '/r/test/pp2/', author: 'u', preview: null, thumbnail: null } }] },
+      data: { children: [{ data: { id: 'pp2', title: 'Pro item $200', selftext: '', permalink: '/r/test/pp2/', author: 'u', preview: null, thumbnail: null } }] },
     });
     const db = (await vi.importMock('./db.js')).default;
     const mockRun = vi.fn(() => ({ changes: 1 }));
@@ -505,7 +505,7 @@ describe('scanSubreddit', () => {
       .mockReturnValueOnce(null)
       .mockReturnValue({ jwt_version: 1 });
     const mockAll = vi.fn()
-      .mockReturnValueOnce([{ id: 1, keywords: 'item', min_price: null, max_price: null, min_score: null, last_matched_at: null, tier: 'pro_plus', is_premium: 1, user_id: 1, notify_type: 'discord', notify_target: 'https://discord.com/api/webhooks/123', scan_interval: null, subreddit: 'mechmarket' }])
+      .mockReturnValueOnce([{ id: 1, keywords: 'item', min_price: null, max_price: null, min_score: null, last_matched_at: null, tier: 'pro', is_premium: 1, user_id: 1, notify_type: 'discord', notify_target: 'https://discord.com/api/webhooks/123', scan_interval: null, subreddit: 'mechmarket' }])
       .mockReturnValue([]);
     db.prepare.mockReturnValue({ run: mockRun, get: mockGet, all: mockAll });
     await scanSubreddit('mechmarket');

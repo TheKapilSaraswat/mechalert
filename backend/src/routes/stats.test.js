@@ -235,7 +235,7 @@ describe('Stats Routes', () => {
     const res = mockRes();
     getHandler('get', '/insights')(mockReq(), res);
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Daily insights require Pro or Pro+.' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Daily insights require Pro.' });
   });
 
   it('GET /insights returns insights for pro+ tier user', async () => {

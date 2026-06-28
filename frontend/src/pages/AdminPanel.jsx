@@ -43,7 +43,7 @@ We noticed you're using MechAlert on the Free plan. Here's what you're missing:
 - Discord, Telegram, Slack, ntfy, Pushover notifications
 - Deal collections & price drop alerts
 - AI deal explanations & smart filters
-- API access (Pro+)
+- API access
 
 Upgrade today and never miss a deal!
 
@@ -163,7 +163,7 @@ https://mechalert-production.up.railway.app/pricing`);
           )}
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
-            <StatBox label="Total Users" value={stats.users.total} sub={`${stats.users.pro} pro · ${stats.users.pro_plus} pro+ · ${stats.users.free} free`} />
+            <StatBox label="Total Users" value={stats.users.total} sub={`${stats.users.pro} pro · ${stats.users.free} free`} />
             <StatBox label="Scanned Posts" value={stats.content.posts} sub={`${stats.activity24h.posts} in 24h`} />
             <StatBox label="Alert Matches" value={stats.content.matches} sub={`${stats.activity24h.matches} in 24h`} />
             <StatBox label="Alert Rules" value={stats.content.rules} sub={`${stats.content.activeRules} active`} />
@@ -226,7 +226,7 @@ https://mechalert-production.up.railway.app/pricing`);
                           {u.is_active === 0 ? '● Disabled' : '● Active'}
                         </span>
                       </td>
-                      <td style={tdStyle}>{u.tier === 'pro_plus' ? '⚡ Pro+' : u.tier === 'pro' ? '⚡ Pro' : 'Free'}</td>
+                      <td style={tdStyle}>{u.tier === 'pro' ? '⚡ Pro' : 'Free'}</td>
                       <td style={tdStyle}>{u.rule_count}</td>
                       <td style={tdStyle}>{u.match_count}</td>
                       <td style={tdStyle}>{u.mail_count || 0}</td>
@@ -247,12 +247,11 @@ https://mechalert-production.up.railway.app/pricing`);
                               <input type="checkbox" checked={!!editForm.is_active}
                                 onChange={e => setEditForm(f => ({ ...f, is_active: e.target.checked ? 1 : 0 }))} /> Active
                             </label>
-                            <select value={editForm.tier} onChange={e => setEditForm(f => ({ ...f, tier: e.target.value }))}
-                              style={{ fontSize: '0.7rem', padding: '2px 4px', background: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: 3 }}>
-                              <option value="free">Free</option>
-                              <option value="pro">Pro</option>
-                              <option value="pro_plus">Pro+</option>
-                            </select>
+                              <select value={editForm.tier} onChange={e => setEditForm(f => ({ ...f, tier: e.target.value }))}
+                                style={{ fontSize: '0.7rem', padding: '2px 4px', background: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', borderRadius: 3 }}>
+                                <option value="free">Free</option>
+                                <option value="pro">Pro</option>
+                              </select>
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button onClick={() => saveUser(u.id)} className="btn-sm" style={{ borderColor: '#238636', color: '#3fb950' }}>Save</button>
                               <button onClick={() => setEditingUser(null)} className="btn-sm">Cancel</button>

@@ -14,11 +14,10 @@ function getTier(userId) {
   return u.tier || (u.is_premium ? 'pro' : 'free');
 }
 
-const TIER_LIMITS = { free: 3, pro: -1, pro_plus: -1 };
+const TIER_LIMITS = { free: 3, pro: -1 };
 const TIER_FEATURES = {
   free: { priceFilters: false, minScore: false, customInterval: false, advancedNotify: false },
   pro: { priceFilters: true, minScore: true, customInterval: true, advancedNotify: true },
-  pro_plus: { priceFilters: true, minScore: true, customInterval: true, advancedNotify: true },
 };
 
 router.get('/', jwtAuth, (req, res) => {
@@ -40,20 +39,20 @@ router.post('/', jwtAuth, validate(createAlertRuleSchema), (req, res) => {
     const limit = TIER_LIMITS[tier] || 3;
     const ruleCount = db.prepare('SELECT COUNT(*) as cnt FROM alert_rules WHERE user_id = ?').get(req.user.userId).cnt;
     if (limit > 0 && ruleCount >= limit) {
-      return res.status(403).json({ error: `Free tier limit: ${limit} alert rules. Upgrade to Pro or Pro+ for unlimited.` });
+      return res.status(403).json({ error: `Free tier limit: ${limit} alert rules. Upgrade to Pro for unlimited.` });
     }
 
     if (!features.priceFilters && (data.min_price != null || data.max_price != null)) {
-      return res.status(403).json({ error: 'Price filters require Pro or Pro+.' });
+      return res.status(403).json({ error: 'Price filters require Pro.' });
     }
     if (!features.minScore && data.min_score != null) {
-      return res.status(403).json({ error: 'Minimum deal score filter requires Pro or Pro+.' });
+      return res.status(403).json({ error: 'Minimum deal score filter requires Pro.' });
     }
     if (!features.customInterval && data.scan_interval != null) {
-      return res.status(403).json({ error: 'Custom scan interval requires Pro or Pro+.' });
+      return res.status(403).json({ error: 'Custom scan interval requires Pro.' });
     }
     if (!features.advancedNotify && data.notify_type && data.notify_type !== 'email') {
-      return res.status(403).json({ error: 'Non-email notifications require Pro or Pro+.' });
+      return res.status(403).json({ error: 'Non-email notifications require Pro.' });
     }
 
     const result = db.prepare(
@@ -106,10 +105,10 @@ router.put('/:id', jwtAuth, validate(updateAlertRuleSchema), (req, res) => {
     const features = TIER_FEATURES[tier] || TIER_FEATURES.free;
 
     if (!features.priceFilters && (data.min_price != null || data.max_price != null)) {
-      return res.status(403).json({ error: 'Price filters require Pro or Pro+.' });
+      return res.status(403).json({ error: 'Price filters require Pro.' });
     }
     if (!features.advancedNotify && data.notify_type && data.notify_type !== 'email') {
-      return res.status(403).json({ error: 'Non-email notifications require Pro or Pro+.' });
+      return res.status(403).json({ error: 'Non-email notifications require Pro.' });
     }
 
     const pauseUntil = data.pause_until || null;

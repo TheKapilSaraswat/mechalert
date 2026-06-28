@@ -32,10 +32,7 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-function getPrice(plan) {
-  if (plan === 'pro_plus') {
-    return process.env.PAYPAL_PROPLUS_MONTHLY || '3.99';
-  }
+function getPrice() {
   return process.env.PAYPAL_PRO_MONTHLY || '2.99';
 }
 
@@ -45,7 +42,7 @@ router.post('/create-order', jwtAuth, async (req, res) => {
     if (!token) return res.status(500).json({ error: 'PayPal not configured' });
 
     const { plan } = req.body;
-    if (!plan || !['pro', 'pro_plus'].includes(plan)) {
+    if (!plan || plan !== 'pro') {
       return res.status(400).json({ error: 'Invalid plan.' });
     }
 
@@ -121,10 +118,9 @@ router.post('/capture-order', jwtAuth, async (req, res) => {
     }
 
     if (captureData.status === 'COMPLETED') {
-      const tier = plan === 'pro_plus' ? 'pro_plus' : 'pro';
-      db.prepare(
-        "UPDATE users SET is_premium = 1, tier = ?, payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
-      ).run(tier, 'paypal', order_id, req.user.userId);
+        db.prepare(
+        "UPDATE users SET is_premium = 1, tier = 'pro', payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
+      ).run('paypal', order_id, req.user.userId);
       db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'completed', ?, 'paypal')").run(req.user.userId, plan);
 
       logger.info(`User ${req.user.userId} upgraded to premium (PayPal)`);
@@ -179,10 +175,9 @@ router.post('/webhook', async (req, res) => {
         const captureId = resource.id;
         const parsedId = parseInt(customId, 10);
         if (customId && !isNaN(parsedId) && parsedId > 0) {
-      const tier = resource.custom_id?.includes('pro_plus') ? 'pro_plus' : 'pro';
       db.prepare(
-        "UPDATE users SET is_premium = 1, tier = ?, payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
-      ).run(tier, 'paypal', captureId, parsedId);
+        "UPDATE users SET is_premium = 1, tier = 'pro', payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
+      ).run('paypal', captureId, parsedId);
       try { db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'completed', ?, 'paypal')").run(parsedId, tier); } catch {}
       logger.info(`User ${parsedId} upgraded to premium (PayPal capture completed)`);
         }
@@ -256,10 +251,9 @@ router.get('/return', async (req, res) => {
 
     const captureData = await capturer.json();
     if (captureData.status === 'COMPLETED') {
-      const tier = plan === 'pro_plus' ? 'pro_plus' : 'pro';
       db.prepare(
-        "UPDATE users SET is_premium = 1, tier = ?, payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
-      ).run(tier, 'paypal', token, parsedUserId);
+        "UPDATE users SET is_premium = 1, tier = 'pro', payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
+      ).run('paypal', token, parsedUserId);
       logger.info(`User ${parsedUserId} upgraded to premium (PayPal return)`);
     }
 

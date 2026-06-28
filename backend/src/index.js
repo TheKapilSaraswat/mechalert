@@ -267,17 +267,14 @@ app.get('/api/config', (req, res) => {
     tiers: {
       free: { rules: 3, interval: 180 },
       pro: { price: 2.99, priceINR: 199, rules: -1, interval: 10 },
-      pro_plus: { price: 3.99, priceINR: 399, rules: -1, interval: 2 },
     },
     razorpay: {
       key: process.env.RAZORPAY_KEY_ID || '',
       pro: { monthly: parseInt(process.env.RAZORPAY_PRO_MONTHLY) || parseInt(process.env.RAZORPAY_AMOUNT_MONTHLY) || 19900, yearly: parseInt(process.env.RAZORPAY_PRO_YEARLY) || parseInt(process.env.RAZORPAY_AMOUNT_YEARLY) || 199900 },
-      pro_plus: { monthly: parseInt(process.env.RAZORPAY_PROPLUS_MONTHLY) || parseInt(process.env.RAZORPAY_AMOUNT_MONTHLY) || 39900, yearly: parseInt(process.env.RAZORPAY_PROPLUS_YEARLY) || parseInt(process.env.RAZORPAY_AMOUNT_YEARLY) || 399900 },
     },
     paypal: {
       clientId: process.env.PAYPAL_CLIENT_ID || '',
       pro: { monthly: process.env.PAYPAL_PRO_MONTHLY || '2.99', yearly: process.env.PAYPAL_PRO_YEARLY || '29.99' },
-      pro_plus: { monthly: process.env.PAYPAL_PROPLUS_MONTHLY || '3.99', yearly: process.env.PAYPAL_PROPLUS_YEARLY || '39.99' },
     },
     sources: [
       { id: 'reddit', label: 'Reddit', subs: ['mechmarket', 'hardwareswap', 'appleswap', 'photomarket', 'homelabsales', 'AVexchange', 'gamesale', 'Pen_Swap'] },
