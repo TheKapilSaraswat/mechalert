@@ -58,29 +58,46 @@ Return JSON only.`;
 function basicParse(query) {
   const filters = {};
   const lower = query.toLowerCase().trim();
+  function cur() { return '(?:[$€£]|\\b[a-z]{3}\\b\\s+)?'; }
+  function mkMaxRe() { return new RegExp('(?:under|below|less than|<|max|up to|at most|budget)\\s*' + cur() + '\\s*(\\d+)', 'i'); }
+  function mkMinRe() { return new RegExp('(?:over|above|more than|>|min|at least|starting at)\\s*' + cur() + '\\s*(\\d+)', 'i'); }
+  function mkRangeRe() { return new RegExp(cur() + '\\s*(\\d+)\\s*(?:-|to|–)\\s*' + cur() + '\\s*(\\d+)'); }
 
-  const maxMatch = lower.match(/(?:under|below|less than|<|max|up to|at most|budget)\s*\$?\s*(\d+)/i);
+  const maxMatch = lower.match(mkMaxRe());
   if (maxMatch) filters.max_price = parseFloat(maxMatch[1]);
 
-  const minMatch = lower.match(/(?:over|above|more than|>|min|at least|starting at)\s*\$?\s*(\d+)/i);
+  const minMatch = lower.match(mkMinRe());
   if (minMatch) filters.min_price = parseFloat(minMatch[1]);
 
-  const rangeMatch = lower.match(/\$?(\d+)\s*(?:-|to|–)\s*\$?(\d+)/);
+  const rangeMatch = lower.match(mkRangeRe());
   if (rangeMatch) {
     filters.min_price = parseFloat(rangeMatch[1]);
     filters.max_price = parseFloat(rangeMatch[2]);
   }
 
+  const betweenMatch = lower.match(/between\s*(?:[$€£])?\s*(\d+)\s*and\s*(?:[$€£])?\s*(\d+)/i);
+  if (betweenMatch) {
+    filters.min_price = parseFloat(betweenMatch[1]);
+    filters.max_price = parseFloat(betweenMatch[2]);
+  }
+
+  const suffixMatch = lower.match(/(\d+)\s*(?:\bor\b\s+less\b|\band\b\s+under\b|\bor\b\s+lower\b|\band\b\s+below\b)(?!\s*\d)/i);
+  if (suffixMatch) filters.max_price = parseFloat(suffixMatch[1]);
+
   const sourceMatch = lower.match(/\b(?:on|from)\s+(reddit|craigslist)\b/i);
   if (sourceMatch) filters.source = sourceMatch[1].toLowerCase();
 
+  function curG() { return '(?:[$€£]\\s*|\\b[a-z]{3}\\b\\s+)?'; }
+
   let kw = query
-    .replace(/(?:under|below|less than|<|max|up to|at most|budget)\s*\$?\s*\d+/gi, '')
-    .replace(/(?:over|above|more than|>|min|at least|starting at)\s*\$?\s*\d+/gi, '')
-    .replace(/\$?\d+\s*(?:-|to|–)\s*\$?\d+/g, '')
+    .replace(new RegExp('(?:under|below|less than|<|max|up to|at most|budget)\\s*' + curG() + '\\d+', 'gi'), '')
+    .replace(new RegExp('(?:over|above|more than|>|min|at least|starting at)\\s*' + curG() + '\\d+', 'gi'), '')
+    .replace(new RegExp(curG() + '\\d+\\s*(?:-|to|–)\\s*' + curG() + '\\d+', 'g'), '')
+    .replace(/between\s*(?:[$€£])?\s*\d+\s*and\s*(?:[$€£])?\s*\d+/gi, '')
+    .replace(/\d+\s*(?:\bor\b\s+less\b|\band\b\s+under\b|\bor\b\s+lower\b|\band\b\s+below\b)(?!\s*\d)/gi, '')
     .replace(/\b(?:on|from)\s+(?:reddit|craigslist)\b/gi, '')
-    .replace(/\$[\d.,]+/g, '')
-    .replace(/\b(?:under|below|less than|over|above|more than|max|min|up to|at most|at least|budget|starting|cheap|cheapest|best|deal|deals|find|search|show|me|for|and|the|a|an|in|of|to|with)\b/gi, '')
+    .replace(/[$€£][\d.,]+/g, '')
+    .replace(/\b(?:under|below|less than|over|above|more than|max|min|up to|at most|at least|budget|starting|cheap|cheapest|best|deal|deals|find|search|show|me|for|or|and|the|a|an|in|of|to|with|on|less)\b/gi, '')
     .replace(/[<>]/g, '')
     .trim();
 
@@ -161,4 +178,5 @@ router.post('/', jwtAuth, validate(searchQuerySchema), async (req, res) => {
   }
 });
 
+export { basicParse };
 export default router;

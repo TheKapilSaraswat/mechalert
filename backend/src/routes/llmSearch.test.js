@@ -84,10 +84,10 @@ describe('LLM Search Routes', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ interpreted: false }));
   });
 
-  it('has interpreted: false for long query when parseQuery returns null', async () => {
+  it('has interpreted: true for long query when basicParse succeeds', async () => {
     const res = mockRes();
     await getHandler('post', '/')(mockReq({ body: { query: 'keyboard under 200' }, validated: { query: 'keyboard under 200' } }), res);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ interpreted: false }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ interpreted: true }));
   });
 
   it('returns results as an array', async () => {
@@ -152,7 +152,8 @@ describe('LLM Search Routes', () => {
     const res = mockRes();
     await getHandler('post', '/')(mockReq({ body: { query: 'keyboard cheap' }, validated: { query: 'keyboard cheap' } }), res);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      filters: { keywords: 'keyboard cheap' },
+      filters: { keywords: 'keyboard' },
+      interpreted: true,
     }));
   });
 
@@ -464,7 +465,7 @@ describe('LLM Search Routes', () => {
       }));
     });
 
-    it('handles empty filters object from parseQuery (no WHERE clause)', async () => {
+    it('falls back to basicParse when LLM returns empty filters', async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
@@ -474,7 +475,7 @@ describe('LLM Search Routes', () => {
       const res = mockRes();
       await getHandler('post', '/')(mockReq({ body: { query: 'anything' }, validated: { query: 'anything' } }), res);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        filters: {},
+        filters: { keywords: 'anything' },
         interpreted: true,
       }));
     });

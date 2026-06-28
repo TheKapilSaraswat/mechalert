@@ -61,7 +61,6 @@ describe('Admin Routes', () => {
     db.prepare().get
       .mockReturnValueOnce({ c: 100 })
       .mockReturnValueOnce({ c: 10 })
-      .mockReturnValueOnce({ c: 5 })
       .mockReturnValueOnce({ c: 1000 })
       .mockReturnValueOnce({ c: 500 })
       .mockReturnValueOnce({ c: 200 })
