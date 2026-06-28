@@ -28,7 +28,7 @@ router.post('/create-order', jwtAuth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid plan.' });
     }
 
-    const amount = getAmount(plan);
+    const amount = getAmount();
     db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'started', ?, 'razorpay')").run(req.user.userId, plan);
     const order = await client.orders.create({
       amount,
@@ -91,7 +91,7 @@ router.post('/webhook', async (req, res) => {
 
         if (!isNaN(parsedId) && parsedId > 0 && orderId) {
           db.prepare(
-            "UPDATE users SET is_premium = 1, payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
+            "UPDATE users SET is_premium = 1, tier = 'pro', payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
           ).run('razorpay', orderId, parsedId);
           try { const p = event.payload.payment.entity; db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'completed', ?, 'razorpay')").run(parsedId, (p.notes?.plan || 'pro')); } catch {}
           logger.info(`User ${parsedId} upgraded to premium (Razorpay)`);

@@ -46,7 +46,7 @@ router.post('/create-order', jwtAuth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid plan.' });
     }
 
-    const price = getPrice(plan);
+    const price = getPrice();
     db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'started', ?, 'paypal')").run(req.user.userId, plan);
     const orderRes = await fetch(`${PAYPAL_API}/v2/checkout/orders`, {
       method: 'POST',
@@ -178,7 +178,7 @@ router.post('/webhook', async (req, res) => {
       db.prepare(
         "UPDATE users SET is_premium = 1, tier = 'pro', payment_provider = ?, provider_subscription_id = ?, subscription_ends_at = datetime('now', '+30 days') WHERE id = ?"
       ).run('paypal', captureId, parsedId);
-      try { db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'completed', ?, 'paypal')").run(parsedId, tier); } catch {}
+      try { db.prepare("INSERT INTO checkout_events (user_id, event, plan, payment_method) VALUES (?, 'completed', ?, 'paypal')").run(parsedId, 'pro'); } catch {}
       logger.info(`User ${parsedId} upgraded to premium (PayPal capture completed)`);
         }
         break;
