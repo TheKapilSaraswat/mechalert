@@ -28,7 +28,7 @@ export default function Dashboard() {
   const [subreddit, setSubreddit] = useState('mechmarket');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
-  const [scanInterval, setScanInterval] = useState(180);
+  const [scanInterval, setScanInterval] = useState(1440);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -116,7 +116,7 @@ export default function Dashboard() {
     setSubreddit(rule.subreddit || 'mechmarket');
     setMinPrice(rule.min_price || '');
     setMaxPrice(rule.max_price || '');
-    setScanInterval(rule.scan_interval || 180);
+    setScanInterval(rule.scan_interval || 1440);
     setEditingId(rule.id);
     setShowForm(true);
   };
@@ -263,8 +263,8 @@ export default function Dashboard() {
   const limitColor = remaining <= 0 ? 'full' : remaining === 1 ? 'low' : remaining <= FREE_LIMIT / 2 ? 'medium' : 'high';
 
   const getDefaultScanInterval = () => {
-    if (tier === 'pro') return 10;
-    return 180;
+    if (tier === 'pro') return 180;
+    return 1440;
   };
 
   const achievements = [
@@ -357,7 +357,6 @@ export default function Dashboard() {
         <div style={{ display: 'flex', gap: 8 }}>
           {tier === 'free' && (
             <Link to="/pricing" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Upgrade to Pro</Link>
-          )}
           )}
         </div>
       </div>
@@ -611,17 +610,16 @@ export default function Dashboard() {
                 <label>Scan interval</label>
                 <select value={scanInterval} onChange={e => setScanInterval(parseInt(e.target.value))}>
                   {tier === 'free' && (
-                    <option value={180}>Every 3 hours</option>
+                    <option value={1440}>Once per day</option>
                   )}
                   {tier === 'pro' && (
                     <>
-                      <option value={5}>Every 5 minutes</option>
-                      <option value={10}>Every 10 minutes</option>
-                      <option value={15}>Every 15 minutes</option>
                       <option value={30}>Every 30 minutes</option>
-                      <option value={60}>Every 60 minutes</option>
+                      <option value={60}>Every 1 hour</option>
+                      <option value={180}>Every 3 hours</option>
+                      <option value={360}>Every 6 hours</option>
+                      <option value={720}>Every 12 hours</option>
                     </>
-                  )}
                   )}
                 </select>
                 <p className="field-hint">How often to check for new matches</p>

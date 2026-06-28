@@ -38,7 +38,7 @@ export default function AdminPanel() {
 
 We noticed you're using MechAlert on the Free plan. Here's what you're missing:
 
-- Scan every 10 min instead of 3 hours
+- Scan every 3 hours instead of once per day
 - Price filters & history tracking
 - Discord, Telegram, Slack, ntfy, Pushover notifications
 - Deal collections & price drop alerts

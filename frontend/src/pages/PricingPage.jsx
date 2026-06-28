@@ -12,7 +12,7 @@ const PLANS = [
     features: [
       '3 alert rules max',
       'Email notifications only',
-      'Scan every 3 hours',
+      'Scan once per day',
       'Reddit RSS (8 subreddits)',
       'Craigslist (5 metro areas)',
       'AI deal scoring',
@@ -29,7 +29,7 @@ const PLANS = [
     features: [
       'Unlimited alert rules',
       'Email + Discord + Telegram + Slack + ntfy + Pushover',
-      'Scan every 10 minutes',
+      'Scan every 3 hours',
       'Price filters & history tracking',
       'Deal collections & folders',
       'Price drop alerts',
