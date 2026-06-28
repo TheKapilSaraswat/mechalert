@@ -107,7 +107,7 @@ export async function scanSubreddit(subreddit) {
           ? (Date.now() - new Date(rule.last_matched_at).getTime()) / 60000
           : Infinity;
         const tier = rule.tier || (rule.is_premium ? 'pro' : 'free');
-        const baseInterval = tier === 'pro' ? 10 : 180;
+        const baseInterval = tier === 'pro' ? 180 : 1440;
         const interval = rule.scan_interval || baseInterval;
         if (minSinceMatch < interval) continue;
 

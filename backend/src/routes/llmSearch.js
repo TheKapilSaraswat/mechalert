@@ -57,51 +57,102 @@ Return JSON only.`;
 
 function basicParse(query) {
   const filters = {};
-  const lower = query.toLowerCase().trim();
-  function cur() { return '(?:[$€£]|\\b[a-z]{3}\\b\\s+)?'; }
-  function mkMaxRe() { return new RegExp('(?:under|below|less than|<|max|up to|at most|budget)\\s*' + cur() + '\\s*(\\d+)', 'i'); }
-  function mkMinRe() { return new RegExp('(?:over|above|more than|>|min|at least|starting at)\\s*' + cur() + '\\s*(\\d+)', 'i'); }
-  function mkRangeRe() { return new RegExp(cur() + '\\s*(\\d+)\\s*(?:-|to|–)\\s*' + cur() + '\\s*(\\d+)'); }
 
-  const maxMatch = lower.match(mkMaxRe());
+  // Normalize trailing currency symbols (200$ → $200)
+  query = query.replace(/(\d+)\s*([$€£])/g, '$2$1');
+  const norm = query.toLowerCase().trim();
+
+  // ---- Extract price/source filters ----
+  function cur() { return '(?:[$€£]|\\b[a-z]{3}\\b\\s+)?'; }
+
+  const maxRe = new RegExp('(?:under|below|less than|<|max|up to|at most|budget)\\s*' + cur() + '\\s*(\\d+)', 'i');
+  const maxMatch = norm.match(maxRe);
   if (maxMatch) filters.max_price = parseFloat(maxMatch[1]);
 
-  const minMatch = lower.match(mkMinRe());
+  const minRe = new RegExp('(?:over|above|more than|>|min|at least|starting at)\\s*' + cur() + '\\s*(\\d+)', 'i');
+  const minMatch = norm.match(minRe);
   if (minMatch) filters.min_price = parseFloat(minMatch[1]);
 
-  const rangeMatch = lower.match(mkRangeRe());
+  const rangeRe = new RegExp(cur() + '\\s*(\\d+)\\s*(?:-|to|–)\\s*' + cur() + '\\s*(\\d+)');
+  const rangeMatch = norm.match(rangeRe);
   if (rangeMatch) {
     filters.min_price = parseFloat(rangeMatch[1]);
     filters.max_price = parseFloat(rangeMatch[2]);
   }
 
-  const betweenMatch = lower.match(/between\s*(?:[$€£])?\s*(\d+)\s*and\s*(?:[$€£])?\s*(\d+)/i);
+  const betweenMatch = norm.match(/between\s*(?:[$€£])?\s*(\d+)\s*and\s*(?:[$€£])?\s*(\d+)/i);
   if (betweenMatch) {
     filters.min_price = parseFloat(betweenMatch[1]);
     filters.max_price = parseFloat(betweenMatch[2]);
   }
 
-  const suffixMatch = lower.match(/(\d+)\s*(?:\bor\b\s+less\b|\band\b\s+under\b|\bor\b\s+lower\b|\band\b\s+below\b)(?!\s*\d)/i);
+  const suffixMatch = norm.match(/(\d+)\s*(?:\bor\b\s+less\b|\band\b\s+under\b|\bor\b\s+lower\b|\band\b\s+below\b)(?!\s*\d)/i);
   if (suffixMatch) filters.max_price = parseFloat(suffixMatch[1]);
 
-  const sourceMatch = lower.match(/\b(?:on|from)\s+(reddit|craigslist)\b/i);
+  const sourceMatch = norm.match(/\b(?:on|from)\s+(reddit|craigslist)\b/i);
   if (sourceMatch) filters.source = sourceMatch[1].toLowerCase();
 
-  function curG() { return '(?:[$€£]\\s*|\\b[a-z]{3}\\b\\s+)?'; }
+  // ---- Build keyword exclusion set using matched text ranges ----
+  // Collect all character positions that belong to price/source expressions
+  const removeChars = new Set();
 
-  let kw = query
-    .replace(new RegExp('(?:under|below|less than|<|max|up to|at most|budget)\\s*' + curG() + '\\d+', 'gi'), '')
-    .replace(new RegExp('(?:over|above|more than|>|min|at least|starting at)\\s*' + curG() + '\\d+', 'gi'), '')
-    .replace(new RegExp(curG() + '\\d+\\s*(?:-|to|–)\\s*' + curG() + '\\d+', 'g'), '')
-    .replace(/between\s*(?:[$€£])?\s*\d+\s*and\s*(?:[$€£])?\s*\d+/gi, '')
-    .replace(/\d+\s*(?:\bor\b\s+less\b|\band\b\s+under\b|\bor\b\s+lower\b|\band\b\s+below\b)(?!\s*\d)/gi, '')
-    .replace(/\b(?:on|from)\s+(?:reddit|craigslist)\b/gi, '')
-    .replace(/[$€£][\d.,]+/g, '')
-    .replace(/\b(?:under|below|less than|over|above|more than|max|min|up to|at most|at least|budget|starting|cheap|cheapest|best|deal|deals|find|search|show|me|for|or|and|the|a|an|in|of|to|with|on|less)\b/gi, '')
-    .replace(/[<>]/g, '')
-    .trim();
+  function markRange(re) {
+    const re2 = new RegExp(re.source, 'gi');
+    let m;
+    while ((m = re2.exec(norm)) !== null) {
+      for (let c = m.index; c < m.index + m[0].length; c++) {
+        removeChars.add(c);
+      }
+    }
+  }
 
-  if (kw) filters.keywords = kw;
+  // Patterns that should be excluded from keywords
+  markRange(new RegExp('(?:under|below|less\\s+than|<|max|up\\s+to|at\\s+most|budget)\\s*' + cur() + '\\s*\\d+', 'i'));
+  markRange(new RegExp('(?:over|above|more\\s+than|>|min|at\\s+least|starting\\s+at)\\s*' + cur() + '\\s*\\d+', 'i'));
+  markRange(new RegExp(cur() + '\\s*\\d+\\s*(?:-|to|–)\\s*' + cur() + '\\s*\\d+'));
+  markRange(/between\s*(?:[$€£])?\s*\d+\s*and\s*(?:[$€£])?\s*\d+/i);
+  markRange(/\d+\s*(?:\bor\b\s+less\b|\band\b\s+under\b|\bor\b\s+lower\b|\band\b\s+below\b)/i);
+  markRange(/\b(?:on|from)\s+(?:reddit|craigslist)\b/i);
+  markRange(/[$€£][\d.,]+/g);
+
+  // Also mark individual tokens that are price words, source words, stop words, or symbols
+  const priceWords = new Set([
+    'under', 'below', 'less', 'than', '<', 'max', 'up', 'to', 'at', 'most',
+    'budget', 'over', 'above', 'more', '>', 'min', 'least', 'starting',
+    'between', 'and', 'or',
+  ]);
+  const sourceWords = new Set(['on', 'from', 'reddit', 'craigslist']);
+  const stopWords = new Set([
+    'the', 'a', 'an', 'in', 'of', 'with', 'for', 'me',
+    'cheap', 'cheapest', 'best', 'deal', 'deals', 'find', 'search', 'show',
+  ]);
+
+  const tokens = norm.split(/\s+/).filter(Boolean);
+  let pos = 0;
+  const keep = tokens.map((t, i) => {
+    const start = pos;
+    const end = start + t.length;
+    pos = end + 1;
+
+    // If overlapping a marked range, discard
+    for (let c = start; c < end; c++) {
+      if (removeChars.has(c)) return false;
+    }
+
+    // Price words
+    if (priceWords.has(t)) return false;
+    // Source words
+    if (sourceWords.has(t)) return false;
+    // Stop words
+    if (stopWords.has(t)) return false;
+    // Lone symbols
+    if (/^[<>]$/.test(t)) return false;
+
+    return true;
+  });
+
+  const kwTokens = tokens.filter((_, i) => keep[i]);
+  if (kwTokens.length) filters.keywords = kwTokens.join(' ');
 
   return filters;
 }

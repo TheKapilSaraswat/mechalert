@@ -138,7 +138,7 @@ describe('createAlertRuleSchema extended', () => {
   it('rejects min_score > 100', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', min_score: 101 }).success).toBe(false));
   it('rejects min_score < 0', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', min_score: -1 }).success).toBe(false));
   it('accepts scan_interval', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', scan_interval: 30 }).success).toBe(true));
-  it('rejects scan_interval > 180', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', scan_interval: 200 }).success).toBe(false));
+  it('rejects scan_interval > 1440', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', scan_interval: 1500 }).success).toBe(false));
   it('rejects scan_interval < 1', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', scan_interval: 0 }).success).toBe(false));
   it('rejects decimal scan_interval', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', scan_interval: 1.5 }).success).toBe(false));
   it('accepts min_price = 0', () => expect(createAlertRuleSchema.safeParse({ keywords: 'test', notify_target: 'a@b.com', min_price: 0 }).success).toBe(true));

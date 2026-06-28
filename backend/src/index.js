@@ -265,8 +265,8 @@ app.get('/api/stats', (req, res) => {
 app.get('/api/config', (req, res) => {
   res.json({
     tiers: {
-      free: { rules: 3, interval: 180 },
-      pro: { price: 2.99, priceINR: 199, rules: -1, interval: 10 },
+      free: { rules: 3, interval: 1440 },
+      pro: { price: 2.99, priceINR: 199, rules: -1, interval: 180 },
     },
     razorpay: {
       key: process.env.RAZORPAY_KEY_ID || '',

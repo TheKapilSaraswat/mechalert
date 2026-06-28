@@ -105,7 +105,7 @@ export async function scanCraigslist() {
         const minSinceMatch = rule.last_matched_at
           ? (Date.now() - new Date(rule.last_matched_at).getTime()) / 60000
           : Infinity;
-        const interval = rule.scan_interval || (rule.is_premium ? 10 : 180);
+        const interval = rule.scan_interval || (rule.is_premium ? 180 : 1440);
         if (minSinceMatch < interval) continue;
 
         db.prepare(

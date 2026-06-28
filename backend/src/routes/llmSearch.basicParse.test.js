@@ -43,6 +43,9 @@ describe('basicParse - max price patterns', () => {
     ['laptop at most $1000', { max_price: 1000 }],
     ['budget 200 monitor', { max_price: 200 }],
     ['budget $200 monitor', { max_price: 200 }],
+    ['keyboard under 100$', { max_price: 100 }],
+    ['mouse under 50€', { max_price: 50 }],
+    ['gpu under 200£', { max_price: 200 }],
   ])('parses max price: "%s"', (query, expected) => {
     check(query, expected);
   });
@@ -64,6 +67,9 @@ describe('basicParse - min price patterns', () => {
     ['phone at least $200', { min_price: 200 }],
     ['starting at 50 keyboard', { min_price: 50 }],
     ['starting at $50 keyboard', { min_price: 50 }],
+    ['camera over 200$', { min_price: 200 }],
+    ['laptop above 100€', { min_price: 100 }],
+    ['phone over 300£', { min_price: 300 }],
   ])('parses min price: "%s"', (query, expected) => {
     check(query, expected);
   });
@@ -126,6 +132,10 @@ describe('basicParse - combined patterns', () => {
     ['monitor above 100 below 400 on reddit', { min_price: 100, max_price: 400, source: 'reddit' }],
     ['phone 200-600 from craigslist', { min_price: 200, max_price: 600, source: 'craigslist' }],
     ['laptop at least 500 up to 1500 on reddit', { min_price: 500, max_price: 1500, source: 'reddit' }],
+    ['gmk keycaps under 200$', { keywords: 'gmk keycaps', max_price: 200 }],
+    ['gmk keycaps under 200€', { keywords: 'gmk keycaps', max_price: 200 }],
+    ['gmk keycaps under 200£', { keywords: 'gmk keycaps', max_price: 200 }],
+    ['keycaps over 50$ under 200$', { keywords: 'keycaps', min_price: 50, max_price: 200 }],
   ])('parses combined: "%s"', (query, expected) => {
     check(query, expected);
   });

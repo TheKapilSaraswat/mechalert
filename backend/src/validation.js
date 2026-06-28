@@ -18,7 +18,7 @@ export const createAlertRuleSchema = z.object({
   min_price: z.number().min(0).nullable().optional(),
   max_price: z.number().min(0).nullable().optional(),
   min_score: z.number().min(0).max(100).nullable().optional(),
-  scan_interval: z.number().int().min(1).max(180).nullable().optional(),
+  scan_interval: z.number().int().min(1).max(1440).nullable().optional(),
   notify_type: z.enum(['email', 'discord', 'telegram', 'slack', 'ntfy', 'pushover']).optional().default('email'),
   notify_target: z.string().min(1).max(500),
 });
@@ -29,7 +29,7 @@ export const updateAlertRuleSchema = z.object({
   min_price: z.number().min(0).nullable().optional(),
   max_price: z.number().min(0).nullable().optional(),
   min_score: z.number().min(0).max(100).nullable().optional(),
-  scan_interval: z.number().int().min(1).max(180).nullable().optional(),
+  scan_interval: z.number().int().min(1).max(1440).nullable().optional(),
   notify_type: z.enum(['email', 'discord', 'telegram', 'slack', 'ntfy', 'pushover']).optional(),
   notify_target: z.string().min(1).max(500).optional(),
   is_active: z.number().int().min(0).max(1).optional(),
