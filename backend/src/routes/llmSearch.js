@@ -55,6 +55,40 @@ Return JSON only.`;
   }
 }
 
+function basicParse(query) {
+  const filters = {};
+  const lower = query.toLowerCase().trim();
+
+  const maxMatch = lower.match(/(?:under|below|less than|<|max|up to|at most|budget)\s*\$?\s*(\d+)/i);
+  if (maxMatch) filters.max_price = parseFloat(maxMatch[1]);
+
+  const minMatch = lower.match(/(?:over|above|more than|>|min|at least|starting at)\s*\$?\s*(\d+)/i);
+  if (minMatch) filters.min_price = parseFloat(minMatch[1]);
+
+  const rangeMatch = lower.match(/\$?(\d+)\s*(?:-|to|–)\s*\$?(\d+)/);
+  if (rangeMatch) {
+    filters.min_price = parseFloat(rangeMatch[1]);
+    filters.max_price = parseFloat(rangeMatch[2]);
+  }
+
+  const sourceMatch = lower.match(/\b(?:on|from)\s+(reddit|craigslist)\b/i);
+  if (sourceMatch) filters.source = sourceMatch[1].toLowerCase();
+
+  let kw = query
+    .replace(/(?:under|below|less than|<|max|up to|at most|budget)\s*\$?\s*\d+/gi, '')
+    .replace(/(?:over|above|more than|>|min|at least|starting at)\s*\$?\s*\d+/gi, '')
+    .replace(/\$?\d+\s*(?:-|to|–)\s*\$?\d+/g, '')
+    .replace(/\b(?:on|from)\s+(?:reddit|craigslist)\b/gi, '')
+    .replace(/\$[\d.,]+/g, '')
+    .replace(/\b(?:under|below|less than|over|above|more than|max|min|up to|at most|at least|budget|starting|cheap|cheapest|best|deal|deals|find|search|show|me|for|and|the|a|an|in|of|to|with)\b/gi, '')
+    .replace(/[<>]/g, '')
+    .trim();
+
+  if (kw) filters.keywords = kw;
+
+  return filters;
+}
+
 function buildQuery(filters) {
   const conditions = [];
   const params = [];
@@ -70,7 +104,7 @@ function buildQuery(filters) {
   }
 
   if (filters.max_price) {
-    conditions.push('(sp.price <= ? OR sp.price IS NULL)');
+    conditions.push('sp.price <= ?');
     params.push(filters.max_price);
   }
 
@@ -111,10 +145,9 @@ router.post('/', jwtAuth, validate(searchQuerySchema), async (req, res) => {
       return res.json({ query, filters: { keywords: query }, results, interpreted: false });
     }
 
-    const filters = await parseQuery(query);
-    if (!filters) {
-      const results = buildQuery({ keywords: query });
-      return res.json({ query, filters: { keywords: query }, results, interpreted: false });
+    let filters = await parseQuery(query);
+    if (!filters || !filters.keywords) {
+      filters = basicParse(query);
     }
 
     const results = buildQuery(filters);
