@@ -39,7 +39,7 @@ router.post('/post', webhookAuth, validate(webhookPostSchema), async (req, res) 
     }
 
     const rules = db.prepare(
-      'SELECT ar.*, u.email FROM alert_rules ar JOIN users u ON ar.user_id = u.id WHERE ar.is_active = 1 AND (ar.subreddit = ? OR ar.subreddit = \'all\')'
+      "SELECT ar.*, u.email FROM alert_rules ar JOIN users u ON ar.user_id = u.id WHERE ar.is_active = 1 AND ar.deleted_at IS NULL AND (ar.subreddit = ? OR ar.subreddit = 'all')"
     ).all(subreddit || 'mechmarket');
 
     for (const rule of rules) {
@@ -51,7 +51,7 @@ router.post('/post', webhookAuth, validate(webhookPostSchema), async (req, res) 
         'INSERT INTO alert_matches (alert_rule_id, post_id, matched_keyword) VALUES (?, ?, ?)'
       ).run(rule.id, id, matchedKeywords[0]);
 
-      await sendNotification(rule, { title, permalink, selftext: body || '' }, matchedKeywords[0]);
+      sendNotification(rule, { title, permalink, selftext: body || '' }, matchedKeywords[0]).catch(err => logger.error('Webhook notification error', { error: err.message }));
     }
 
     res.json({ ok: true, new: true, aiScore });

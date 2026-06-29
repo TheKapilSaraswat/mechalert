@@ -11,24 +11,38 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+  const [resendSent, setResendSent] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState(null);
 
   if (user) return <Navigate to="/dashboard" />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setUnverifiedEmail(null);
+    setResendSent(false);
+    setRegisteredEmail(null);
     if (!email.trim()) return setError('Please enter your email address.');
     if (!password) return setError('Please enter your password.');
     if (password.length < 8) return setError('Password must be at least 8 characters.');
     if (isRegister && password !== confirmPassword) return setError('Passwords do not match.');
     setLoading(true);
     try {
-      if (isRegister) await register(email, password);
-      else await login(email, password);
-      navigate('/dashboard');
+      if (isRegister) {
+        await register(email, password);
+        setRegisteredEmail(email);
+        setLoading(false);
+        return;
+      } else {
+        await login(email, password);
+        navigate('/dashboard');
+      }
     } catch (err) {
       const msg = err.message || '';
-      if (msg.includes('Email already registered')) {
+      if (err.data?.needsVerification) {
+        setUnverifiedEmail(err.data.email || email);
+      } else if (msg.includes('Email already registered')) {
         setError('An account with this email already exists. Please sign in instead.');
       } else if (msg.includes('Invalid credentials') || msg.includes('Invalid email or password')) {
         setError('Invalid email or password. Please try again.');
@@ -42,6 +56,20 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    setResendSent(false);
+    try {
+      await fetch('/api/auth/resend-verification', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: unverifiedEmail }),
+      });
+      setResendSent(true);
+    } catch { setError('Failed to resend. Try again.'); }
+  };
+
+  const handleSwitchToRegister = () => { setIsRegister(true); setError(''); setUnverifiedEmail(null); setResendSent(false); setRegisteredEmail(null); };
+  const handleSwitchToLogin = () => { setIsRegister(false); setError(''); setUnverifiedEmail(null); setResendSent(false); setRegisteredEmail(null); };
 
   return (
     <div className="auth-page">
@@ -75,15 +103,28 @@ export default function LoginPage() {
             />
           )}
           {error && <div className="alert alert-error" style={{ margin: '8px 0', fontSize: '0.85rem' }}>{error}</div>}
-          <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Sign In'}
-          </button>
+          {registeredEmail ? (
+            <div style={{ textAlign: 'center', margin: '12px 0' }}>
+              <p style={{ color: '#3fb950' }}>Account created! Check your email for a verification link.</p>
+            </div>
+          ) : unverifiedEmail ? (
+            <div style={{ textAlign: 'center', margin: '12px 0' }}>
+              <p style={{ color: '#f0883e' }}>Email not verified. Check your inbox.</p>
+              <button type="button" className="btn btn-secondary btn-block" onClick={handleResend} disabled={resendSent}>
+                {resendSent ? 'Verification email sent!' : 'Resend verification email'}
+              </button>
+            </div>
+          ) : (
+            <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
+              {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Sign In'}
+            </button>
+          )}
         </form>
         <p className="auth-toggle">
           {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button className="link-btn" onClick={() => { setIsRegister(!isRegister); setError(''); }}>{isRegister ? 'Sign In' : 'Register'}</button>
+          <button className="link-btn" onClick={isRegister ? handleSwitchToLogin : handleSwitchToRegister}>{isRegister ? 'Sign In' : 'Register'}</button>
         </p>
-        {!isRegister && (
+        {!isRegister && !unverifiedEmail && !registeredEmail && (
           <p className="auth-toggle" style={{ marginTop: 8 }}>
             <Link to="/forgot">Forgot password?</Link>
           </p>

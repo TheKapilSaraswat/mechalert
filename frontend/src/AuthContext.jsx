@@ -34,9 +34,7 @@ export function AuthProvider({ children }) {
     const data = await api('/auth/register', {
       method: 'POST', body: JSON.stringify({ email, password }), skipAuthRedirect: true,
     });
-    localStorage.setItem('mm_token', data.token);
-    data.user.tier = data.user.tier || (data.user.is_premium ? 'pro' : 'free');
-    setUser(data.user);
+    return data;
   };
 
   const logout = async () => {

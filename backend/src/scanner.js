@@ -3,6 +3,7 @@ import { sendNotification } from './notifier.js';
 import { fetchReddit } from './redditAuth.js';
 import { extractPrice, matchKeywords, matchPrice } from './matchers.js';
 import { scoreDeal } from './aiScorer.js';
+import logger from './logger.js';
 
 export const SUPPORTED_SUBREDDITS = [
   'mechmarket',
@@ -32,7 +33,7 @@ export async function scanSubreddit(subreddit) {
     const rules = db.prepare(
       `SELECT ar.*, u.email, u.is_premium, u.tier FROM alert_rules ar
        JOIN users u ON ar.user_id = u.id
-       WHERE ar.is_active = 1 AND ar.archived_at IS NULL
+       WHERE ar.is_active = 1 AND ar.archived_at IS NULL AND ar.deleted_at IS NULL
          AND (ar.pause_until IS NULL OR ar.pause_until <= datetime('now'))
          AND (ar.subreddit = ? OR ar.subreddit = 'all')`
     ).all(subreddit);
@@ -119,7 +120,7 @@ export async function scanSubreddit(subreddit) {
           "UPDATE alert_rules SET last_matched_at = datetime('now') WHERE id = ?"
         ).run(rule.id);
 
-        await sendNotification(rule, p, matchedKeywords[0]);
+        sendNotification(rule, p, matchedKeywords[0]).catch(err => logger.error('Scanner notification error', { error: err.message }));
       }
     }
   } catch (err) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
 import { api } from '../api';
 
@@ -51,6 +51,14 @@ https://mechalert-production.up.railway.app/pricing`);
   const [marketingSending, setMarketingSending] = useState(false);
   const [marketingResult, setMarketingResult] = useState(null);
   const [trackingStats, setTrackingStats] = useState(null);
+  const [emailHealth, setEmailHealth] = useState(null);
+  const [emailTesting, setEmailTesting] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState(null);
+
+  const fetchEmailHealth = useCallback(async () => {
+    const data = await api('/admin/email-status').catch(() => null);
+    setEmailHealth(data);
+  }, []);
 
   useEffect(() => {
     api('/admin/stats').then(setStats).catch(e => setError(e.message));
@@ -61,6 +69,10 @@ https://mechalert-production.up.railway.app/pricing`);
     api('/admin/user-activity').then(setUserActivity).catch(() => {});
     api('/admin/tracking-stats').then(setTrackingStats).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (tab === 'email') fetchEmailHealth();
+  }, [tab, fetchEmailHealth]);
 
   const viewUser = async (userId) => {
     setSelectedUser(userId);
@@ -111,7 +123,7 @@ https://mechalert-production.up.railway.app/pricing`);
 
   if (!stats) return <div className="loading">Loading admin panel...</div>;
 
-  const tabs = ['overview', 'users', 'activity', 'sources', 'tracking', 'marketing'];
+  const tabs = ['overview', 'users', 'activity', 'sources', 'tracking', 'marketing', 'email'];
 
   return (
     <div>
@@ -588,6 +600,64 @@ https://mechalert-production.up.railway.app/pricing`);
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'email' && (
+        <div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+            <button onClick={async () => {
+              setEmailTesting(true);
+              setEmailTestResult(null);
+              const r = await api('/admin/email-test', { method: 'POST' }).catch(e => ({ error: e.message }));
+              setEmailTestResult(r);
+              setEmailTesting(false);
+              fetchEmailHealth();
+            }} className="btn" disabled={emailTesting}>
+              {emailTesting ? 'Sending...' : 'Test Email Service'}
+            </button>
+            <button onClick={fetchEmailHealth} className="btn-sm">Refresh</button>
+          </div>
+
+          {emailTestResult && (
+            <div style={{ marginBottom: 16, padding: '8px 12px', borderRadius: 6, background: emailTestResult.error ? '#3d1f1f' : '#1f3d1f', border: `1px solid ${emailTestResult.error ? '#f85149' : '#3fb950'}`, color: emailTestResult.error ? '#f85149' : '#3fb950', fontSize: '0.85rem' }}>
+              {emailTestResult.error ? `Failed: ${emailTestResult.error}` : `Test email sent to ${emailTestResult.sent_to} via ${emailTestResult.method}`}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+            <StatBox label="Email Provider" value={emailHealth?.provider || 'N/A'} />
+            <StatBox label="Sent Today" value={emailHealth?.todayCount || 0} />
+            <StatBox label="Remaining" value={emailHealth?.sendGridCredits?.remain ?? (emailHealth?.sendGridCredits?.daily_sent != null ? (100 - emailHealth.sendGridCredits.daily_sent) : 'N/A')} sub={emailHealth?.sendGridCredits?.note || ''} />
+          </div>
+
+          <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 8, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+              <thead>
+                <tr style={{ background: '#0d1117' }}>
+                  <th style={thStyle}>Email</th>
+                  <th style={thStyle}>Type</th>
+                  <th style={thStyle}>Channel</th>
+                  <th style={thStyle}>Subject</th>
+                  <th style={thStyle}>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {emailHealth?.logs?.length === 0 && (
+                  <tr><td colSpan={5} style={{ ...tdStyle, textAlign: 'center', color: '#8b949e' }}>No emails sent in the last 24h</td></tr>
+                )}
+                {emailHealth?.logs?.map((log, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid #21262d' }}>
+                    <td style={tdStyle}>{log.email}</td>
+                    <td style={tdStyle}>{log.type}</td>
+                    <td style={tdStyle}>{log.channel}</td>
+                    <td style={tdStyle}>{log.subject}</td>
+                    <td style={{ ...tdStyle, fontSize: '0.7rem' }}>{log.created_at?.split('.')[0]?.replace('T', ' ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

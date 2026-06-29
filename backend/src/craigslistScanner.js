@@ -25,7 +25,7 @@ async function searchCraigslist(query) {
       const html = await res.text();
       const $ = cheerio.load(html);
 
-      $('.cl-static-search-result a[href*=".html"]').each((_, el) => {
+      $('.cl-static-search-result a').each((_, el) => {
         const href = $(el).attr('href');
         const titleEl = $(el).find('.title');
         const priceEl = $(el).find('.price');
@@ -34,7 +34,7 @@ async function searchCraigslist(query) {
         const priceMatch = priceText.match(/\$([\d,]+(?:\.\d{2})?)/);
         if (title && priceMatch && href) {
           items.push({
-            id: href.split('/').pop().replace('.html', ''),
+            id: href.split('/').pop(),
             title,
             price: parseFloat(priceMatch[1].replace(/,/g, '')),
             url: href,
@@ -65,7 +65,7 @@ export async function scanCraigslist() {
       'INSERT INTO price_history (post_id, price) VALUES (?, ?)'
     );
     const rules = db.prepare(
-      'SELECT ar.*, u.email, u.is_premium FROM alert_rules ar JOIN users u ON ar.user_id = u.id WHERE ar.is_active = 1 AND ar.subreddit = ?'
+      "SELECT ar.*, u.email, u.is_premium, u.tier FROM alert_rules ar JOIN users u ON ar.user_id = u.id WHERE ar.is_active = 1 AND ar.deleted_at IS NULL AND ar.subreddit = ?"
     ).all('craigslist');
 
     for (const item of allItems) {

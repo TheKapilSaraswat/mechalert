@@ -19,6 +19,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
     "@sentry/node": "^10.58.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.7.0",

@@ -14,7 +14,7 @@ router.get('/', jwtAuth, (req, res) => {
     const totalListings = db.prepare('SELECT COUNT(*) as c FROM scanned_posts').get().c;
     const watchedListings = db.prepare('SELECT COUNT(*) as c FROM scanned_posts WHERE post_id IN (SELECT post_id FROM saved_deals WHERE user_id = ?)').get(userId).c;
     const matchesFound = db.prepare('SELECT COUNT(*) as c FROM alert_matches am JOIN alert_rules ar ON am.alert_rule_id = ar.id WHERE ar.user_id = ?').get(userId).c;
-    const rulesActive = db.prepare('SELECT COUNT(*) as c FROM alert_rules WHERE user_id = ? AND is_active = 1').get(userId).c;
+    const rulesActive = db.prepare('SELECT COUNT(*) as c FROM alert_rules WHERE user_id = ? AND is_active = 1 AND deleted_at IS NULL').get(userId).c;
     const savedDeals = db.prepare('SELECT COUNT(*) as c FROM saved_deals WHERE user_id = ?').get(userId).c;
     const searchesDone = db.prepare('SELECT COUNT(*) as c FROM deal_search_history WHERE user_id = ?').get(userId).c;
     const totalSaved = db.prepare("SELECT COALESCE(SUM(sp.price - COALESCE(sp.market_value, sp.price)), 0) as savings FROM saved_deals sd JOIN scanned_posts sp ON sd.post_id = sp.post_id WHERE sd.user_id = ? AND sp.market_value IS NOT NULL AND sp.market_value > sp.price").get(userId).savings;

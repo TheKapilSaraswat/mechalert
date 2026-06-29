@@ -50,7 +50,7 @@ router.get('/users', adminAuth, (req, res) => {
   try {
     const users = db.prepare(`
       SELECT u.id, u.email, u.is_premium, u.is_admin, u.tier, u.is_active, u.created_at,
-        (SELECT COUNT(*) FROM alert_rules ar WHERE ar.user_id = u.id) as rule_count,
+        (SELECT COUNT(*) FROM alert_rules ar WHERE ar.user_id = u.id AND ar.deleted_at IS NULL) as rule_count,
         (SELECT COUNT(*) FROM alert_matches am JOIN alert_rules ar ON am.alert_rule_id = ar.id WHERE ar.user_id = u.id) as match_count,
         (SELECT COUNT(*) FROM notification_log WHERE user_id = u.id AND type = 'marketing') as mail_count
       FROM users u ORDER BY u.id DESC LIMIT 100
@@ -362,6 +362,110 @@ router.post('/user-email/:id', adminAuth, async (req, res) => {
   } catch (err) {
     logger.error('Admin user-email error', { error: err.message });
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/email-check', adminAuth, async (req, res) => {
+  try {
+    const { email } = req.body;
+    const targetEmail = email || ADMIN_EMAIL || 'kapil.saraswat981@gmail.com';
+    const subject = `MechAlert - Email Check ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
+    const body = 'This is an automated email check from MechAlert admin panel. If you receive this, email delivery is working correctly.';
+
+    let sendGridCredits = null;
+    if (process.env.SENDGRID_API_KEY) {
+      try {
+        const sgResp = await fetch('https://api.sendgrid.com/v3/user/credits', {
+          headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}` },
+        });
+        if (sgResp.ok) {
+          const data = await sgResp.json();
+          sendGridCredits = { remain: data.remain, total: data.total, used: data.used, reset: data.last_reset };
+        } else if (sgResp.status === 404) {
+          const statsResp = await fetch(`https://api.sendgrid.com/v3/stats?aggregated_by=day&start_date=${new Date().toISOString().slice(0, 10)}&limit=1`, {
+            headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}` },
+          });
+          if (statsResp.ok) {
+            const stats = await statsResp.json();
+            const sentToday = stats.reduce((sum, d) => sum + (d.stats?.[0]?.metrics?.delivered || 0), 0);
+            sendGridCredits = { daily_sent: sentToday, note: 'Free plan - 100/day limit' };
+          }
+        }
+      } catch { }
+    }
+
+    await sendEmail(targetEmail, subject, body);
+    const adminUser = db.prepare("SELECT id FROM users WHERE is_admin = 1 LIMIT 1").get();
+    if (adminUser) {
+      db.prepare('INSERT INTO notification_log (user_id, type, channel, subject, body) VALUES (?, ?, ?, ?, ?)')
+        .run(adminUser.id, 'email_check', 'email', subject, body);
+    }
+
+    res.json({
+      ok: true,
+      sent_to: targetEmail,
+      method: process.env.SENDGRID_API_KEY ? 'sendgrid' : process.env.RESEND_API_KEY ? 'resend' : 'smtp',
+      sendgrid: sendGridCredits,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.error('Admin email-check error', { error: err.message });
+    res.status(500).json({ error: 'Server error', message: err.message });
+  }
+});
+
+router.get('/email-status', adminAuth, async (req, res) => {
+  try {
+    let sendGridCredits = null;
+    if (process.env.SENDGRID_API_KEY) {
+      try {
+        const sgResp = await fetch('https://api.sendgrid.com/v3/user/credits', {
+          headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}` },
+        });
+        if (sgResp.ok) {
+          const data = await sgResp.json();
+          sendGridCredits = { remain: data.remain, total: data.total, used: data.used, reset: data.last_reset };
+        } else if (sgResp.status === 404) {
+          const statsResp = await fetch(`https://api.sendgrid.com/v3/stats?aggregated_by=day&start_date=${new Date().toISOString().slice(0, 10)}&limit=1`, {
+            headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}` },
+          });
+          if (statsResp.ok) {
+            const stats = await statsResp.json();
+            const sentToday = stats.reduce((sum, d) => sum + (d.stats?.[0]?.metrics?.delivered || 0), 0);
+            sendGridCredits = { daily_sent: sentToday, limit: 100, note: 'Free plan - 100/day limit' };
+          }
+        }
+      } catch (e) { sendGridCredits = { error: e.message }; }
+    }
+    const todayLogs = db.prepare(`
+      SELECT u.email, nl.type, nl.channel, nl.subject, nl.created_at
+      FROM notification_log nl JOIN users u ON nl.user_id = u.id
+      WHERE nl.created_at >= datetime('now', '-1 day')
+      ORDER BY nl.created_at DESC
+    `).all();
+    const todayCount = todayLogs.length;
+    res.json({ sendGridCredits, todayCount, logs: todayLogs, provider: process.env.SENDGRID_API_KEY ? 'sendgrid' : process.env.RESEND_API_KEY ? 'resend' : 'smtp' });
+  } catch (err) {
+    logger.error('Admin email-status error', { error: err.message });
+    res.status(500).json({ error: 'Server error', message: err.message });
+  }
+});
+
+router.post('/email-test', adminAuth, async (req, res) => {
+  try {
+    const targetEmail = 'kapil.saraswat981@gmail.com';
+    const subject = `MechAlert Test Email ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
+    const body = 'This is a test email from MechAlert admin panel. Your email delivery is working correctly.';
+    await sendEmail(targetEmail, subject, body);
+    const adminUser = db.prepare("SELECT id FROM users WHERE is_admin = 1 LIMIT 1").get();
+    if (adminUser) {
+      db.prepare('INSERT INTO notification_log (user_id, type, channel, subject, body) VALUES (?, ?, ?, ?, ?)')
+        .run(adminUser.id, 'email_test', 'email', subject, body);
+    }
+    res.json({ ok: true, sent_to: targetEmail, method: process.env.SENDGRID_API_KEY ? 'sendgrid' : process.env.RESEND_API_KEY ? 'resend' : 'smtp', timestamp: new Date().toISOString() });
+  } catch (err) {
+    logger.error('Admin email-test error', { error: err.message });
+    res.status(500).json({ error: 'Server error', message: err.message });
   }
 });
 

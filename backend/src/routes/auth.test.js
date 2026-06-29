@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockStmt = {
   run: vi.fn(() => ({ changes: 1, lastInsertRowid: 42 })),
-  get: vi.fn(() => ({ jwt_version: 1, id: 1, email: 'test@example.com', password_hash: '$2a$10$hashedpassword', is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, is_active: 1, locked_until: null, failed_attempts: 0 })),
+  get: vi.fn(() => ({ jwt_version: 1, id: 1, email: 'test@example.com', password_hash: '$2a$10$hashedpassword', is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, is_active: 1, locked_until: null, failed_attempts: 0, email_verified: 1 })),
   all: vi.fn(() => []),
 };
 
@@ -85,7 +85,7 @@ function getRouteHandlers(method, path) {
 
 function resetMockStmt() {
   mockStmt.get.mockReset();
-  mockStmt.get.mockImplementation(() => ({ jwt_version: 1, id: 1, email: 'test@example.com', password_hash: '$2a$10$hashedpassword', is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, is_active: 1, locked_until: null, failed_attempts: 0 }));
+  mockStmt.get.mockImplementation(() => ({ jwt_version: 1, id: 1, email: 'test@example.com', password_hash: '$2a$10$hashedpassword', is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, is_active: 1, locked_until: null, failed_attempts: 0, email_verified: 1 }));
   mockStmt.all.mockReset();
   mockStmt.all.mockImplementation(() => []);
   mockStmt.run.mockReset();
@@ -255,7 +255,7 @@ describe('POST /login', () => {
   });
 
   it('returns 403 for disabled account', async () => {
-    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'disabled@example.com', password_hash: 'hash', is_active: 0, is_premium: 0, is_admin: 0, tier: 'free', locked_until: null, failed_attempts: 0, jwt_version: 1 });
+    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'disabled@example.com', password_hash: 'hash', is_active: 0, is_premium: 0, is_admin: 0, tier: 'free', locked_until: null, failed_attempts: 0, jwt_version: 1, email_verified: 0 });
     const handlers = getRouteHandlers('post', '/login');
     const handler = handlers[handlers.length - 1];
     const req = mockReq({ body: { email: 'disabled@example.com', password: 'pwd' }, validated: { email: 'disabled@example.com', password: 'pwd' } });
@@ -266,7 +266,7 @@ describe('POST /login', () => {
 
   it('returns 429 for locked account', async () => {
     const future = new Date(Date.now() + 3600000).toISOString();
-    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'locked@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', locked_until: future, failed_attempts: 10, jwt_version: 1 });
+    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'locked@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', locked_until: future, failed_attempts: 10, jwt_version: 1, email_verified: 1 });
     const handlers = getRouteHandlers('post', '/login');
     const handler = handlers[handlers.length - 1];
     const req = mockReq({ body: { email: 'locked@example.com', password: 'pwd' }, validated: { email: 'locked@example.com', password: 'pwd' } });
@@ -277,7 +277,7 @@ describe('POST /login', () => {
 
   it('locks account after 10 failed attempts', async () => {
     bcrypt.compareSync.mockReturnValueOnce(false);
-    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'fail@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', locked_until: null, failed_attempts: 9, jwt_version: 1 });
+    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'fail@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', locked_until: null, failed_attempts: 9, jwt_version: 1, email_verified: 1 });
     const handlers = getRouteHandlers('post', '/login');
     const handler = handlers[handlers.length - 1];
     const req = mockReq({ body: { email: 'fail@example.com', password: 'wrong' }, validated: { email: 'fail@example.com', password: 'wrong' } });
@@ -287,7 +287,7 @@ describe('POST /login', () => {
   });
 
   it('resets failed attempts on successful login', async () => {
-    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', locked_until: null, failed_attempts: 3, jwt_version: 1 });
+    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', locked_until: null, failed_attempts: 3, jwt_version: 1, email_verified: 1 });
     const handlers = getRouteHandlers('post', '/login');
     const handler = handlers[handlers.length - 1];
     const req = mockReq({ body: { email: 'test@example.com', password: 'correct' }, validated: { email: 'test@example.com', password: 'correct' } });
@@ -322,6 +322,7 @@ describe('POST /login', () => {
         tier: 'free',
         digest_frequency: 'never',
         api_key: null,
+        email_verified: 1,
       },
     });
   });
@@ -338,7 +339,7 @@ describe('POST /login', () => {
 
   it('increments failed_attempts for invalid password', () => {
     bcrypt.compareSync.mockReturnValueOnce(false);
-    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, locked_until: null, failed_attempts: 0, jwt_version: 1 });
+    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, locked_until: null, failed_attempts: 0, jwt_version: 1, email_verified: 1 });
     const handlers = getRouteHandlers('post', '/login');
     const handler = handlers[handlers.length - 1];
     const req = mockReq({ body: { email: 'test@example.com', password: 'wrong' }, validated: { email: 'test@example.com', password: 'wrong' } });
@@ -349,7 +350,7 @@ describe('POST /login', () => {
   });
 
   it('returns 500 when update fails after valid login', () => {
-    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, locked_until: null, failed_attempts: 0, jwt_version: 1 });
+    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, locked_until: null, failed_attempts: 0, jwt_version: 1, email_verified: 1 });
     mockStmt.run.mockImplementation(() => { throw new Error('update error'); });
     const handlers = getRouteHandlers('post', '/login');
     const handler = handlers[handlers.length - 1];
@@ -360,7 +361,7 @@ describe('POST /login', () => {
   });
 
   it('handles user with null optional fields', () => {
-    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: null, digest_frequency: null, api_key: null, locked_until: null, failed_attempts: 0, jwt_version: 1 });
+    mockStmt.get.mockReturnValueOnce({ id: 1, email: 'test@example.com', password_hash: 'hash', is_active: 1, is_premium: 0, is_admin: 0, tier: null, digest_frequency: null, api_key: null, locked_until: null, failed_attempts: 0, jwt_version: 1, email_verified: 1 });
     const handlers = getRouteHandlers('post', '/login');
     const handler = handlers[handlers.length - 1];
     const req = mockReq({ body: { email: 'test@example.com', password: 'correct' }, validated: { email: 'test@example.com', password: 'correct' } });

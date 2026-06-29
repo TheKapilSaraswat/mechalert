@@ -10,6 +10,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import AdminPanel from './pages/AdminPanel';
 import PrivacyPage from './pages/PrivacyPage';
 import ContactPage from './pages/ContactPage';
+import VerifyPage from './pages/VerifyPage';
 
 function NavBar() {
   const { user, logout } = useAuth();
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+          <Route path="/verify" element={<VerifyPage />} />
           <Route path="*" element={
             <div style={{ textAlign: 'center', padding: 80 }}>
               <h1>404</h1>

@@ -246,6 +246,8 @@ try { db.exec('ALTER TABLE scanned_posts ADD COLUMN seller_location TEXT'); } ca
 try { db.exec('ALTER TABLE scanned_posts ADD COLUMN normalized_title TEXT'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN referrer_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN verification_token TEXT'); } catch {}
 try { db.exec(`
   CREATE TABLE IF NOT EXISTS feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -266,6 +268,22 @@ try { db.exec(`
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (referrer_id) REFERENCES users(id),
     FOREIGN KEY (claimed_user_id) REFERENCES users(id)
+  )
+`); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN last_batch_email_at TEXT'); } catch {}
+try { db.exec('ALTER TABLE alert_rules ADD COLUMN deleted_at TEXT'); } catch {}
+try { db.exec(`
+  CREATE TABLE IF NOT EXISTS email_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    rule_id INTEGER,
+    post_id TEXT NOT NULL,
+    matched_keyword TEXT NOT NULL,
+    title TEXT,
+    price REAL,
+    permalink TEXT,
+    queued_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
   )
 `); } catch {}
 if (process.env.ADMIN_EMAIL) {

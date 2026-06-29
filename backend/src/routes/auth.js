@@ -81,6 +81,32 @@ const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
+async function sendVerificationEmail(to, token) {
+  const baseUrl = process.env.BASE_URL || 'https://mechalert-production.up.railway.app';
+  const verifyUrl = `${baseUrl}/verify?token=${token}`;
+  const text = `Verify your email: ${verifyUrl}\n\nThis link expires in 24 hours.`;
+  const html = `<p>Click <a href="${verifyUrl}">here</a> to verify your email. This link expires in 24 hours.</p>`;
+  try {
+    if (resend) {
+      const { data, error } = await resend.emails.send({
+        from: process.env.EMAIL_FROM || 'MechAlert <onboarding@resend.dev>',
+        to, subject: '[MechAlert] Verify Your Email', text, html,
+      });
+      if (error) throw error;
+      if (data?.id) logger.info('Verification email sent via Resend', { id: data.id, to });
+      return;
+    }
+  } catch (err) { logger.error('Resend verify failed', { error: err.message }); }
+  try {
+    const t = await getTransporter();
+    const info = await t.sendMail({
+      from: process.env.EMAIL_FROM || 'noreply@mechalert.com',
+      to, subject: '[MechAlert] Verify Your Email', text, html,
+    });
+    if (info.messageId) logger.info('Verification email sent via SMTP', { messageId: info.messageId, to });
+  } catch (err) { logger.error('Verify send error', { error: err.message }); }
+}
+
 router.post('/register', validate(registerSchema), (req, res) => {
   try {
     const { email, password } = req.validated;
@@ -90,11 +116,14 @@ router.post('/register', validate(registerSchema), (req, res) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = bcrypt.hashSync(password, 10);
-    const result = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(normalizedEmail, hash);
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const result = db.prepare('INSERT INTO users (email, password_hash, email_verified, verification_token) VALUES (?, ?, 0, ?)').run(normalizedEmail, hash, verifyToken);
+
+    setImmediate(() => sendVerificationEmail(normalizedEmail, verifyToken).catch(() => {}));
 
     const userData = db.prepare('SELECT jwt_version FROM users WHERE id = ?').get(result.lastInsertRowid);
     const token = jwt.sign({ userId: result.lastInsertRowid, version: userData.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: { id: result.lastInsertRowid, email: normalizedEmail, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null } });
+    res.status(201).json({ token, user: { id: result.lastInsertRowid, email: normalizedEmail, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, email_verified: 0 } });
   } catch (err) {
     logger.error('Register error', { error: err.message });
     res.status(500).json({ error: 'Server error' });
@@ -115,6 +144,11 @@ router.post('/login', validate(loginSchema), (req, res) => {
 
     if (user.is_active === 0) {
       return res.status(403).json({ error: 'Account disabled. Contact support.' });
+    }
+
+    const isAdminEmail = user.email === process.env.ADMIN_EMAIL || user.is_admin;
+    if (!user.email_verified && !isAdminEmail) {
+      return res.status(403).json({ error: 'Email not verified', needsVerification: true, email: normalizedEmail });
     }
 
     if (user.locked_until && new Date(user.locked_until) > new Date()) {
@@ -139,7 +173,7 @@ router.post('/login', validate(loginSchema), (req, res) => {
 
     const token = jwt.sign({ userId: user.id, version: user.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
     const tier = user.tier || (user.is_premium ? 'pro' : 'free');
-    res.json({ token, user: { id: user.id, email: user.email, is_premium: user.is_premium, is_admin: user.is_admin, tier, digest_frequency: user.digest_frequency || 'never', api_key: user.api_key } });
+    res.json({ token, user: { id: user.id, email: user.email, is_premium: user.is_premium, is_admin: user.is_admin, tier, digest_frequency: user.digest_frequency || 'never', api_key: user.api_key, email_verified: user.email_verified } });
   } catch (err) {
     logger.error('Login error', { error: err.message });
     res.status(500).json({ error: 'Server error' });
@@ -184,6 +218,38 @@ router.post('/reset', validate(resetPasswordSchema), (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error('Reset error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/verify', (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'Verification token required' });
+    const user = db.prepare('SELECT id, email, verification_token FROM users WHERE verification_token = ?').get(token);
+    if (!user) return res.status(400).json({ error: 'Invalid or expired verification token' });
+    db.prepare('UPDATE users SET email_verified = 1, verification_token = NULL WHERE id = ?').run(user.id);
+    res.json({ ok: true, message: 'Email verified successfully' });
+  } catch (err) {
+    logger.error('Verify error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = db.prepare('SELECT id, email_verified, verification_token FROM users WHERE email = ?').get(normalizedEmail);
+    if (!user) return res.json({ ok: true });
+    if (user.email_verified) return res.status(400).json({ error: 'Email already verified' });
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    db.prepare('UPDATE users SET verification_token = ? WHERE id = ?').run(verifyToken, user.id);
+    setImmediate(() => sendVerificationEmail(normalizedEmail, verifyToken).catch(() => {}));
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error('Resend verification error', { error: err.message });
     res.status(500).json({ error: 'Server error' });
   }
 });

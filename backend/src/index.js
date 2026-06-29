@@ -13,7 +13,7 @@ import { jwtAuth } from './middleware.js';
 import { scanSubreddit } from './scanner.js';
 import { scanCraigslist } from './craigslistScanner.js';
 import { matchKeywords, matchPrice } from './matchers.js';
-import { sendNotification } from './notifier.js';
+import { sendNotification, sendEmail } from './notifier.js';
 import authRoutes from './routes/auth.js';
 import alertRoutes from './routes/alerts.js';
 import webhookRoutes from './routes/webhook.js';
@@ -147,7 +147,7 @@ app.use('/api/savings', savingsRoutes);
 
 app.get('/api/me', jwtAuth, (req, res) => {
   try {
-    const user = db.prepare('SELECT id, email, is_premium, is_admin, tier, is_active, payment_provider, digest_frequency, api_key FROM users WHERE id = ?').get(req.user.userId);
+    const user = db.prepare('SELECT id, email, is_premium, is_admin, tier, is_active, payment_provider, digest_frequency, api_key, email_verified FROM users WHERE id = ?').get(req.user.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     user.tier = user.tier || (user.is_premium ? 'pro' : 'free');
     res.json(user);
@@ -166,7 +166,7 @@ app.get('/api/matches', jwtAuth, (req, res) => {
       FROM alert_matches am
       JOIN scanned_posts sp ON am.post_id = sp.post_id
       JOIN alert_rules ar ON am.alert_rule_id = ar.id
-      WHERE ar.user_id = ? AND ar.archived_at IS NULL
+      WHERE ar.user_id = ? AND ar.archived_at IS NULL AND ar.deleted_at IS NULL
       ORDER BY am.sent_at DESC
       LIMIT 50
     `).all(req.user.userId);
@@ -203,7 +203,7 @@ app.get('/api/alerts/expiring', jwtAuth, (req, res) => {
     const stale = db.prepare(`
       SELECT ar.*, (SELECT COUNT(*) FROM alert_matches am WHERE am.alert_rule_id = ar.id AND am.sent_at >= datetime('now', '-90 days')) as matches_90d
       FROM alert_rules ar
-      WHERE ar.user_id = ? AND ar.is_active = 1 AND ar.archived_at IS NULL
+      WHERE ar.user_id = ? AND ar.is_active = 1 AND ar.archived_at IS NULL AND ar.deleted_at IS NULL
       HAVING matches_90d = 0
     `).all(req.user.userId);
     res.json(stale);
@@ -236,7 +236,7 @@ app.get('/api/debug/reddit', (req, res) => {
   res.json({ REDDIT_TOKEN: envToken, REDDIT_CLIENT_ID: envClient, hasRefreshOrPassword: hasRefresh, rssMode: !envClient && !hasRefresh });
 });
 
-app.get('/api/stats', (req, res) => {
+app.get('/api/public-stats', (req, res) => {
   try {
     const totalPosts = db.prepare('SELECT COUNT(*) as c FROM scanned_posts').get().c;
     const totalMatches = db.prepare('SELECT COUNT(*) as c FROM alert_matches').get().c;
@@ -348,23 +348,12 @@ app.post('/api/track', (req, res) => {
 
 const SUBREDDITS = ['mechmarket', 'hardwareswap', 'appleswap', 'photomarket', 'homelabsales', 'AVexchange', 'gamesale', 'Pen_Swap'];
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-let scanCycle = 0;
-
 async function scanAll() {
-  const batchSize = 4;
-  const start = (scanCycle * batchSize) % SUBREDDITS.length;
-  const batch = SUBREDDITS.slice(start, start + batchSize);
-  scanCycle++;
-  logger.info('Starting scan cycle', { batch, total: SUBREDDITS.length, cycle: scanCycle });
-  for (const sub of batch) {
-    scanSubreddit(sub).catch(err => logger.error(`Scan ${sub} error`, { error: err.message }));
-    await sleep(10000);
-  }
+  logger.info('Starting scan cycle', { total: SUBREDDITS.length });
+  await Promise.all(SUBREDDITS.map(sub => scanSubreddit(sub).catch(err => logger.error(`Scan ${sub} error`, { error: err.message }))));
   if (process.env.ENABLE_CRAIGSLIST_SCANNER !== 'false') {
     logger.info('Starting Craigslist scan');
-    scanCraigslist().catch(err => logger.error('Craigslist scan error', { error: err.message }));
+    await scanCraigslist().catch(err => logger.error('Craigslist scan error', { error: err.message }));
   }
   logger.info('Scan cycle complete');
 }
@@ -455,6 +444,43 @@ cron.schedule('0 0 * * *', async () => {
   }
 });
 
+cron.schedule('*/10 * * * *', async () => {
+  try {
+    const users = db.prepare('SELECT DISTINCT eq.user_id, u.email, u.tier, u.is_premium, u.last_batch_email_at FROM email_queue eq JOIN users u ON eq.user_id = u.id').all();
+    for (const u of users) {
+      const tier = u.tier || (u.is_premium ? 'pro' : 'free');
+      const minInterval = tier === 'pro' ? 180 : 1440;
+      if (u.last_batch_email_at) {
+        const minsSince = (Date.now() - new Date(u.last_batch_email_at + 'Z').getTime()) / 60000;
+        if (minsSince < minInterval) continue;
+      }
+      const items = db.prepare('SELECT * FROM email_queue WHERE user_id = ? ORDER BY queued_at DESC').all(u.user_id);
+      if (items.length === 0) continue;
+      let text = `MechAlert — ${items.length} deal match${items.length > 1 ? 'es' : ''}\n\n`;
+      for (const item of items) {
+        text += `• ${item.title || 'Deal'}`;
+        if (item.price) text += ` — $${item.price}`;
+        text += `\n  Keyword: "${item.matched_keyword}"\n  ${item.permalink || ''}\n\n`;
+      }
+      text += '— MechAlert';
+      try {
+        await sendEmail(u.email, `MechAlert — ${items.length} New Deal Match${items.length > 1 ? 'es' : ''}`, text);
+        for (const item of items) {
+          db.prepare("INSERT INTO notification_log (user_id, type, channel, subject, body) VALUES (?, 'batch_email', 'email', ?, ?)")
+            .run(u.user_id, `Batch: ${items.length} matches`, `Matched: ${item.matched_keyword}`);
+        }
+        db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(u.user_id);
+        db.prepare("UPDATE users SET last_batch_email_at = datetime('now') WHERE id = ?").run(u.user_id);
+        logger.info('Sent batch email', { userId: u.user_id, email: u.email, count: items.length, tier });
+      } catch (err) {
+        logger.error('Batch email send failed', { userId: u.user_id, email: u.email, error: err.message });
+      }
+    }
+  } catch (err) {
+    logger.error('Email queue cron error', { error: err.message });
+  }
+});
+
 cron.schedule('0 8 * * *', async () => {
   logger.info('Running daily digest cron');
   try {
@@ -488,14 +514,15 @@ cron.schedule('0 8 * * *', async () => {
 async function backfillUnmatchedRules() {
   logger.info('Running startup backfill for unmatched rules');
   try {
-    const rules = db.prepare("SELECT ar.*, u.email FROM alert_rules ar JOIN users u ON ar.user_id = u.id WHERE ar.is_active = 1 AND ar.last_matched_at IS NULL").all();
+    const rules = db.prepare("SELECT ar.*, u.email FROM alert_rules ar JOIN users u ON ar.user_id = u.id WHERE ar.is_active = 1 AND ar.deleted_at IS NULL AND ar.last_matched_at IS NULL").all();
     for (const rule of rules) {
       const subFilter = rule.subreddit === 'all' ? "source = 'reddit'"
         : rule.subreddit === 'craigslist' ? "source = 'craigslist'"
         : "category = ?";
       const subParams = rule.subreddit !== 'all' && rule.subreddit !== 'craigslist' ? [rule.subreddit] : [];
-      const posts = db.prepare(`SELECT * FROM scanned_posts WHERE ${subFilter} AND scanned_at > datetime('now', '-1 day') ORDER BY scanned_at DESC LIMIT 100`).all(...subParams);
+      const posts = db.prepare(`SELECT * FROM scanned_posts WHERE ${subFilter} AND scanned_at > datetime('now', '-7 days') ORDER BY scanned_at DESC LIMIT 200`).all(...subParams);
       let matched = 0;
+      const batchPosts = [];
       for (const post of posts) {
         const fullText = `${post.title} ${post.body || ''}`;
         const kw = matchKeywords(fullText, rule.keywords);
@@ -504,9 +531,25 @@ async function backfillUnmatchedRules() {
         const existing = db.prepare('SELECT id FROM alert_matches WHERE alert_rule_id = ? AND post_id = ?').get(rule.id, post.post_id);
         if (existing) continue;
         db.prepare('INSERT INTO alert_matches (alert_rule_id, post_id, matched_keyword) VALUES (?, ?, ?)').run(rule.id, post.post_id, kw[0]);
-        db.prepare("UPDATE alert_rules SET last_matched_at = datetime('now') WHERE id = ?").run(rule.id);
-        sendNotification(rule, post, kw[0]).catch(() => {});
         matched++;
+        batchPosts.push({ post, kw: kw[0] });
+        if (batchPosts.length >= 5) break;
+      }
+      if (batchPosts.length > 0) {
+        db.prepare("UPDATE alert_rules SET last_matched_at = datetime('now') WHERE id = ?").run(rule.id);
+        const lines = batchPosts.map((bp, i) =>
+          `${i+1}. ${bp.post.title}${bp.post.price ? ` - \$${bp.post.price}` : ''}\n   ${bp.post.permalink?.startsWith('http') ? bp.post.permalink : `https://reddit.com${bp.post.permalink}`}`
+        ).join('\n');
+        const body = `New matches found for your alert "${rule.keywords}":\n\n${lines}`;
+        const subject = `${matched} new deals found for "${rule.keywords}"`;
+        const targetEmail = rule.notify_target || rule.email;
+        if (rule.notify_type === 'email' || !rule.notify_type) {
+          await sendEmail(targetEmail, subject, body, '').catch(() => {});
+        } else {
+          for (const bp of batchPosts) {
+            sendNotification(rule, bp.post, bp.kw).catch(() => {});
+          }
+        }
       }
       if (matched > 0) logger.info('Startup backfill', { ruleId: rule.id, keywords: rule.keywords, matched });
     }

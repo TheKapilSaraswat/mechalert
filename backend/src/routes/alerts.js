@@ -22,7 +22,7 @@ const TIER_FEATURES = {
 
 router.get('/', jwtAuth, (req, res) => {
   try {
-    const rules = db.prepare('SELECT * FROM alert_rules WHERE user_id = ? ORDER BY created_at DESC').all(req.user.userId);
+    const rules = db.prepare('SELECT * FROM alert_rules WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at DESC').all(req.user.userId);
     res.json(rules);
   } catch (err) {
     logger.error('GET /alerts error', { error: err.message, userId: req.user?.userId });
@@ -37,9 +37,15 @@ router.post('/', jwtAuth, validate(createAlertRuleSchema), (req, res) => {
     const features = TIER_FEATURES[tier] || TIER_FEATURES.free;
 
     const limit = TIER_LIMITS[tier] || 3;
-    const ruleCount = db.prepare('SELECT COUNT(*) as cnt FROM alert_rules WHERE user_id = ?').get(req.user.userId).cnt;
+    const ruleCount = db.prepare('SELECT COUNT(*) as cnt FROM alert_rules WHERE user_id = ? AND deleted_at IS NULL').get(req.user.userId).cnt;
     if (limit > 0 && ruleCount >= limit) {
       return res.status(403).json({ error: `Free tier limit: ${limit} alert rules. Upgrade to Pro for unlimited.` });
+    }
+    if (tier === 'free') {
+      const created24h = db.prepare("SELECT COUNT(*) as cnt FROM alert_rules WHERE user_id = ? AND created_at >= datetime('now', '-1 day')").get(req.user.userId).cnt;
+      if (created24h >= limit) {
+        return res.status(403).json({ error: `Free tier: max ${limit} rule creates per day. Wait or upgrade to Pro.` });
+      }
     }
 
     if (!features.priceFilters && (data.min_price != null || data.max_price != null)) {
@@ -61,8 +67,11 @@ router.post('/', jwtAuth, validate(createAlertRuleSchema), (req, res) => {
 
     const ruleId = result.lastInsertRowid;
 
-    // Backfill — match against recent existing posts (last 24h)
+    // Backfill — match against recent existing posts (last 24h) with rate limiting
     try {
+      const tier = getTier(req.user.userId);
+      const baseInterval = tier === 'pro' ? 180 : 1440;
+      const interval = (data.scan_interval || baseInterval) * 60 * 1000;
       const subFilter = data.subreddit === 'all' ? "source = 'reddit'"
         : data.subreddit === 'craigslist' ? "source = 'craigslist'"
         : "category = ?";
@@ -75,6 +84,11 @@ router.post('/', jwtAuth, validate(createAlertRuleSchema), (req, res) => {
         if (!matchPrice(fullText, data.min_price, data.max_price)) continue;
         const existing = db.prepare('SELECT id FROM alert_matches WHERE alert_rule_id = ? AND post_id = ?').get(ruleId, post.post_id);
         if (existing) continue;
+        const lastMatched = db.prepare('SELECT last_matched_at FROM alert_rules WHERE id = ?').get(ruleId);
+        if (lastMatched?.last_matched_at) {
+          const minSinceMatch = (Date.now() - new Date(lastMatched.last_matched_at).getTime());
+          if (minSinceMatch < interval) continue;
+        }
         db.prepare('INSERT INTO alert_matches (alert_rule_id, post_id, matched_keyword) VALUES (?, ?, ?)').run(ruleId, post.post_id, matched[0]);
         db.prepare("UPDATE alert_rules SET last_matched_at = datetime('now') WHERE id = ?").run(ruleId);
         sendNotification({
@@ -97,7 +111,7 @@ router.post('/', jwtAuth, validate(createAlertRuleSchema), (req, res) => {
 
 router.put('/:id', jwtAuth, validate(updateAlertRuleSchema), (req, res) => {
   try {
-    const rule = db.prepare('SELECT * FROM alert_rules WHERE id = ? AND user_id = ?').get(req.params.id, req.user.userId);
+    const rule = db.prepare('SELECT * FROM alert_rules WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(req.params.id, req.user.userId);
     if (!rule) return res.status(404).json({ error: 'Rule not found' });
 
     const data = req.validated;
@@ -138,10 +152,15 @@ router.put('/:id', jwtAuth, validate(updateAlertRuleSchema), (req, res) => {
 
 router.delete('/:id', jwtAuth, (req, res) => {
   try {
-    const rule = db.prepare('SELECT id FROM alert_rules WHERE id = ? AND user_id = ?').get(req.params.id, req.user.userId);
+    const rule = db.prepare('SELECT id, user_id FROM alert_rules WHERE id = ? AND user_id = ?').get(req.params.id, req.user.userId);
     if (!rule) return res.status(404).json({ error: 'Rule not found' });
+    const tier = getTier(req.user.userId);
     db.prepare('DELETE FROM alert_matches WHERE alert_rule_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM alert_rules WHERE id = ?').run(req.params.id);
+    if (tier === 'free') {
+      db.prepare("UPDATE alert_rules SET deleted_at = datetime('now') WHERE id = ?").run(req.params.id);
+    } else {
+      db.prepare('DELETE FROM alert_rules WHERE id = ?').run(req.params.id);
+    }
     res.json({ ok: true });
   } catch (err) {
     logger.error('DELETE /alerts error', { error: err.message, userId: req.user?.userId });

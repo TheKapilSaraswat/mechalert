@@ -25,7 +25,7 @@ router.get('/price-trends', (req, res) => {
     let params;
     if (category) {
       query = `
-        SELECT date(recorded_at) as day, AVG(price) as avg_price, MIN(price) as min_price, MAX(price) as max_price, COUNT(*) as samples
+        SELECT date(ph.recorded_at) as day, AVG(ph.price) as avg_price, MIN(ph.price) as min_price, MAX(ph.price) as max_price, COUNT(*) as samples
         FROM price_history ph
         JOIN scanned_posts sp ON ph.post_id = sp.post_id
         WHERE sp.category = ? AND ph.recorded_at >= datetime('now', ?)

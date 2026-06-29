@@ -15,6 +15,12 @@ export async function api(path, options = {}) {
     window.location.href = '/login';
     throw new Error('Session expired');
   }
-  if (!res.ok) throw new Error((await res.json()).error);
+  if (!res.ok) {
+    const data = await res.json();
+    const err = new Error(data.error || 'Request failed');
+    err.data = data;
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }

@@ -79,7 +79,7 @@ Return JSON only. Examples:
     const parsed = JSON.parse(content.replace(/```json|```/g, '').trim());
 
     if (parsed.action === 'create_alert') {
-      const ruleCount = db.prepare('SELECT COUNT(*) as cnt FROM alert_rules WHERE user_id = ?').get(req.user.userId).cnt;
+      const ruleCount = db.prepare('SELECT COUNT(*) as cnt FROM alert_rules WHERE user_id = ? AND deleted_at IS NULL').get(req.user.userId).cnt;
       if (!user.is_premium && ruleCount >= 3) {
         return res.json({ action: 'chat', response: 'You\'ve reached the Free tier limit of 3 rules. Upgrade to Pro to add more!' });
       }

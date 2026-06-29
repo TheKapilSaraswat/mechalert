@@ -1,9 +1,14 @@
 import fetch from 'node-fetch';
 import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 import { Resend } from 'resend';
 import 'dotenv/config';
 import db from './db.js';
 import logger from './logger.js';
+
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 let resend = null;
 const resendKey = process.env.RESEND_API_KEY || (process.env.SMTP_PASS?.startsWith('re_') ? process.env.SMTP_PASS : null);
@@ -16,9 +21,11 @@ let transporter = null;
 async function getTransporter() {
   if (transporter) return transporter;
   if (process.env.SMTP_HOST) {
+    const port = parseInt(process.env.SMTP_PORT || '587');
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
+      port,
+      secure: port === 465,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
   } else {
@@ -60,21 +67,44 @@ export async function sendNotification(rule, post, matchedKeyword) {
       await sendPushover(rule.notify_target, title, text);
       break;
     case 'email':
+      db.prepare('INSERT INTO email_queue (user_id, rule_id, post_id, matched_keyword, title, price, permalink) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(rule.user_id, rule.id, post.post_id || post.id, matchedKeyword, post.title, post.price || null, url);
+      break;
     default:
-      await sendEmail(rule.notify_target, title, text, url);
+      logger.warn('Unknown notify_type', { type: rule.notify_type });
       break;
   }
 }
 
 export async function sendEmail(to, subject, text, url, htmlOverride) {
-  try {
-    if (resend) {
-      const { data, error } = await resend.emails.send({
-        from: process.env.EMAIL_FROM || 'MechAlert <onboarding@resend.dev>',
+  const from = process.env.EMAIL_FROM || 'MechAlert <noreply@mechalert.com>';
+  const subjectPrefixed = `[MechAlert] ${subject.substring(0, 80)}`;
+  const html = htmlOverride || `<p><strong>Deal Match!</strong></p><p>${text.replace(/\n/g, '<br>')}</p>`;
+
+  if (process.env.SENDGRID_API_KEY) {
+    try {
+      await sgMail.send({
         to,
-        subject: `[MechAlert] ${subject.substring(0, 80)}`,
+        from,
+        subject: subjectPrefixed,
         text,
-        html: htmlOverride || `<p><strong>Deal Match!</strong></p><p>${text.replace(/\n/g, '<br>')}</p>`,
+        html,
+      });
+      logger.info('Email sent via SendGrid', { to });
+      return;
+    } catch (err) {
+      logger.error('SendGrid error, falling back', { error: err.message, details: err.response?.body });
+    }
+  }
+
+  if (resend) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from,
+        to,
+        subject: subjectPrefixed,
+        text,
+        html,
       });
       if (error) {
         logger.error('Resend API error', { error: error.message, details: error });
@@ -82,19 +112,19 @@ export async function sendEmail(to, subject, text, url, htmlOverride) {
       }
       logger.info('Email sent via Resend API', { id: data?.id, to });
       return;
+    } catch (err) {
+      logger.error('Resend API failed, falling back to SMTP', { error: err.message });
     }
-  } catch (err) {
-    logger.error('Resend API failed, falling back to SMTP', { error: err.message });
   }
 
   try {
     const t = await getTransporter();
     const info = await t.sendMail({
-      from: process.env.EMAIL_FROM || 'MechAlert <noreply@mechalert.com>',
+      from,
       to,
-      subject: `[MechAlert] ${subject.substring(0, 80)}`,
+      subject: subjectPrefixed,
       text,
-      html: htmlOverride || `<p><strong>Deal Match!</strong></p><p>${text.replace(/\n/g, '<br>')}</p>`,
+      html,
     });
     if (info.messageId && !process.env.SMTP_HOST) {
       logger.warn(`Email NOT delivered to ${to} — no SMTP_HOST configured. Preview in Ethereal: ${nodemailer.getTestMessageUrl(info)}`);
