@@ -29,6 +29,7 @@ vi.mock('jsonwebtoken', () => ({
 vi.mock('crypto', () => ({
   default: {
     randomBytes: vi.fn(() => ({ toString: () => 'mock-random-token-32-bytes-hex' })),
+    randomInt: vi.fn(() => 123456),
   },
 }));
 

@@ -81,30 +81,38 @@ const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-async function sendVerificationEmail(to, token) {
-  const baseUrl = process.env.BASE_URL || 'https://mechalert-production.up.railway.app';
-  const verifyUrl = `${baseUrl}/verify?token=${token}`;
-  const text = `Verify your email: ${verifyUrl}\n\nThis link expires in 24 hours.`;
-  const html = `<p>Click <a href="${verifyUrl}">here</a> to verify your email. This link expires in 24 hours.</p>`;
+function generateOtp() {
+  return String(crypto.randomInt(100000, 999999));
+}
+
+async function sendVerificationEmail(to, otp) {
+  const text = `Your MechAlert verification code is: ${otp}\n\nThis code expires in 10 minutes. If you didn't request this, ignore this email.`;
+  const html = `<p>Your MechAlert verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px;color:#3fb950">${otp}</p><p>This code expires in <strong>10 minutes</strong>.</p><p>If you didn't request this, ignore this email.</p>`;
   try {
     if (resend) {
       const { data, error } = await resend.emails.send({
         from: process.env.EMAIL_FROM || 'MechAlert <onboarding@resend.dev>',
-        to, subject: '[MechAlert] Verify Your Email', text, html,
+        to, subject: '[MechAlert] Your Verification Code', text, html,
       });
       if (error) throw error;
-      if (data?.id) logger.info('Verification email sent via Resend', { id: data.id, to });
+      if (data?.id) logger.info('Verification OTP email sent via Resend', { id: data.id, to });
       return;
     }
-  } catch (err) { logger.error('Resend verify failed', { error: err.message }); }
+  } catch (err) { logger.error('Resend verify OTP failed', { error: err.message }); }
   try {
     const t = await getTransporter();
     const info = await t.sendMail({
       from: process.env.EMAIL_FROM || 'noreply@mechalert.com',
-      to, subject: '[MechAlert] Verify Your Email', text, html,
+      to, subject: '[MechAlert] Your Verification Code', text, html,
     });
-    if (info.messageId) logger.info('Verification email sent via SMTP', { messageId: info.messageId, to });
-  } catch (err) { logger.error('Verify send error', { error: err.message }); }
+    if (info.messageId) {
+      if (!process.env.SMTP_HOST) {
+        logger.info(`Dev mode — verify OTP preview: ${nodemailer.getTestMessageUrl(info)}`);
+      } else {
+        logger.info('Verification OTP email sent via SMTP', { messageId: info.messageId, to });
+      }
+    }
+  } catch (err) { logger.error('Verify OTP send error', { error: err.message }); }
 }
 
 router.post('/register', validate(registerSchema), (req, res) => {
@@ -116,10 +124,12 @@ router.post('/register', validate(registerSchema), (req, res) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = bcrypt.hashSync(password, 10);
-    const verifyToken = crypto.randomBytes(32).toString('hex');
-    const result = db.prepare('INSERT INTO users (email, password_hash, email_verified, verification_token) VALUES (?, ?, 0, ?)').run(normalizedEmail, hash, verifyToken);
+    const otp = generateOtp();
+    const otpHash = bcrypt.hashSync(otp, 6);
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const result = db.prepare('INSERT INTO users (email, password_hash, email_verified, verification_otp, verification_otp_expires) VALUES (?, ?, 0, ?, ?)').run(normalizedEmail, hash, otpHash, otpExpires);
 
-    setImmediate(() => sendVerificationEmail(normalizedEmail, verifyToken).catch(() => {}));
+    setImmediate(() => sendVerificationEmail(normalizedEmail, otp).catch(() => {}));
 
     const userData = db.prepare('SELECT jwt_version FROM users WHERE id = ?').get(result.lastInsertRowid);
     const token = jwt.sign({ userId: result.lastInsertRowid, version: userData.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
@@ -222,6 +232,32 @@ router.post('/reset', validate(resetPasswordSchema), (req, res) => {
   }
 });
 
+router.post('/verify-otp', (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: 'Email and verification code are required' });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = db.prepare('SELECT id, email_verified, verification_otp, verification_otp_expires FROM users WHERE email = ?').get(normalizedEmail);
+    if (!user) return res.status(400).json({ error: 'User not found' });
+    if (user.email_verified) return res.status(400).json({ error: 'Email already verified' });
+    if (!user.verification_otp || !user.verification_otp_expires) {
+      return res.status(400).json({ error: 'No verification code requested. Request a new one.' });
+    }
+    if (new Date(user.verification_otp_expires) < new Date()) {
+      return res.status(400).json({ error: 'Verification code expired. Request a new one.' });
+    }
+    if (!bcrypt.compareSync(otp, user.verification_otp)) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+    db.prepare('UPDATE users SET email_verified = 1, verification_otp = NULL, verification_otp_expires = NULL WHERE id = ?').run(user.id);
+    res.json({ ok: true, message: 'Email verified successfully' });
+  } catch (err) {
+    logger.error('Verify OTP error', { error: err.message });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Keep old link-based verify for backward compat (legacy tokens)
 router.get('/verify', (req, res) => {
   try {
     const { token } = req.query;
@@ -241,12 +277,14 @@ router.post('/resend-verification', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
     const normalizedEmail = email.toLowerCase().trim();
-    const user = db.prepare('SELECT id, email_verified, verification_token FROM users WHERE email = ?').get(normalizedEmail);
+    const user = db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(normalizedEmail);
     if (!user) return res.json({ ok: true });
     if (user.email_verified) return res.status(400).json({ error: 'Email already verified' });
-    const verifyToken = crypto.randomBytes(32).toString('hex');
-    db.prepare('UPDATE users SET verification_token = ? WHERE id = ?').run(verifyToken, user.id);
-    setImmediate(() => sendVerificationEmail(normalizedEmail, verifyToken).catch(() => {}));
+    const otp = generateOtp();
+    const otpHash = bcrypt.hashSync(otp, 6);
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    db.prepare('UPDATE users SET verification_otp = ?, verification_otp_expires = ? WHERE id = ?').run(otpHash, otpExpires, user.id);
+    setImmediate(() => sendVerificationEmail(normalizedEmail, otp).catch(() => {}));
     res.json({ ok: true });
   } catch (err) {
     logger.error('Resend verification error', { error: err.message });

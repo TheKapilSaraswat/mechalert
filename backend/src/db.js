@@ -248,6 +248,8 @@ try { db.exec('ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE'); } catch
 try { db.exec('ALTER TABLE users ADD COLUMN referrer_id INTEGER'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN verification_token TEXT'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN verification_otp TEXT'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN verification_otp_expires TEXT'); } catch {}
 try { db.exec(`
   CREATE TABLE IF NOT EXISTS feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -215,6 +215,7 @@ https://mechalert-production.up.railway.app/pricing`);
                 <tr style={{ background: '#0d1117' }}>
                   <th style={thStyle}>ID</th>
                   <th style={thStyle}>Email</th>
+                  <th style={thStyle}>Verified</th>
                   <th style={thStyle}>Status</th>
                   <th style={thStyle}>Tier</th>
                   <th style={thStyle}>Rules</th>
@@ -233,6 +234,11 @@ https://mechalert-production.up.railway.app/pricing`);
                     <tr key={u.id} style={{ borderTop: '1px solid #21262d', opacity: u.is_active === 0 ? 0.5 : 1 }}>
                       <td style={tdStyle}>{u.id}</td>
                       <td style={tdStyle}>{u.email}</td>
+                      <td style={tdStyle}>
+                        <span style={{ color: u.email_verified ? '#3fb950' : '#d29922', fontSize: '0.75rem' }}>
+                          {u.email_verified ? '✓ Verified' : '○ Pending'}
+                        </span>
+                      </td>
                       <td style={tdStyle}>
                         <span style={{ color: u.is_active === 0 ? '#f85149' : '#3fb950', fontSize: '0.75rem' }}>
                           {u.is_active === 0 ? '● Disabled' : '● Active'}

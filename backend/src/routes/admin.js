@@ -49,7 +49,7 @@ router.get('/stats', adminAuth, (req, res) => {
 router.get('/users', adminAuth, (req, res) => {
   try {
     const users = db.prepare(`
-      SELECT u.id, u.email, u.is_premium, u.is_admin, u.tier, u.is_active, u.created_at,
+      SELECT u.id, u.email, u.is_premium, u.is_admin, u.tier, u.is_active, u.email_verified, u.created_at,
         (SELECT COUNT(*) FROM alert_rules ar WHERE ar.user_id = u.id AND ar.deleted_at IS NULL) as rule_count,
         (SELECT COUNT(*) FROM alert_matches am JOIN alert_rules ar ON am.alert_rule_id = ar.id WHERE ar.user_id = u.id) as match_count,
         (SELECT COUNT(*) FROM notification_log WHERE user_id = u.id AND type = 'marketing') as mail_count
