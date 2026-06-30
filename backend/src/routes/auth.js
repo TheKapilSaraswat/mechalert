@@ -4,9 +4,14 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import sgMail from '@sendgrid/mail';
 import db from '../db.js';
 import logger from '../logger.js';
 import { validate, loginSchema, registerSchema, forgotPasswordSchema, resetPasswordSchema } from '../validation.js';
+
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 let resend = null;
 const resendKey = process.env.RESEND_API_KEY || (process.env.SMTP_PASS?.startsWith('re_') ? process.env.SMTP_PASS : null);
@@ -40,6 +45,17 @@ async function sendResetEmail(to, token) {
   const resetUrl = `${baseUrl}/reset?token=${token}`;
   const text = `Reset your password here: ${resetUrl}\n\nThis link expires in 1 hour.`;
   const html = `<p>Click <a href="${resetUrl}">here</a> to reset your password. This link expires in 1 hour.</p>`;
+
+  try {
+    if (process.env.SENDGRID_API_KEY) {
+      await sgMail.send({
+        to, from: process.env.EMAIL_FROM || 'MechAlert <noreply@mechalert.com>',
+        subject: '[MechAlert] Password Reset', text, html,
+      });
+      logger.info('Reset email sent via SendGrid', { to });
+      return;
+    }
+  } catch (err) { logger.error('SendGrid reset failed', { error: err.message }); }
 
   try {
     if (resend) {
@@ -88,6 +104,16 @@ function generateOtp() {
 async function sendVerificationEmail(to, otp) {
   const text = `Your MechAlert verification code is: ${otp}\n\nThis code expires in 10 minutes. If you didn't request this, ignore this email.`;
   const html = `<p>Your MechAlert verification code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px;color:#3fb950">${otp}</p><p>This code expires in <strong>10 minutes</strong>.</p><p>If you didn't request this, ignore this email.</p>`;
+  try {
+    if (process.env.SENDGRID_API_KEY) {
+      await sgMail.send({
+        to, from: process.env.EMAIL_FROM || 'MechAlert <noreply@mechalert.com>',
+        subject: '[MechAlert] Your Verification Code', text, html,
+      });
+      logger.info('Verification OTP email sent via SendGrid', { to });
+      return;
+    }
+  } catch (err) { logger.error('SendGrid verify OTP failed', { error: err.message }); }
   try {
     if (resend) {
       const { data, error } = await resend.emails.send({
