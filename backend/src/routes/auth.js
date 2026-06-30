@@ -23,7 +23,6 @@ async function getTransporter() {
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT || '587'),
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      connectionTimeout: 10000,
     });
   } else {
     const testAccount = await nodemailer.createTestAccount();
@@ -94,18 +93,21 @@ async function sendVerificationEmail(to, token) {
         to, subject: '[MechAlert] Verify Your Email', text, html,
       });
       if (error) throw error;
-      if (data?.id) { logger.info('Verification email sent via Resend', { id: data.id, to }); return; }
+      if (data?.id) logger.info('Verification email sent via Resend', { id: data.id, to });
+      return;
     }
   } catch (err) { logger.error('Resend verify failed', { error: err.message }); }
-  const t = await getTransporter();
-  const info = await t.sendMail({
-    from: process.env.EMAIL_FROM || 'noreply@mechalert.com',
-    to, subject: '[MechAlert] Verify Your Email', text, html,
-  });
-  if (info.messageId) logger.info('Verification email sent via SMTP', { messageId: info.messageId, to });
+  try {
+    const t = await getTransporter();
+    const info = await t.sendMail({
+      from: process.env.EMAIL_FROM || 'noreply@mechalert.com',
+      to, subject: '[MechAlert] Verify Your Email', text, html,
+    });
+    if (info.messageId) logger.info('Verification email sent via SMTP', { messageId: info.messageId, to });
+  } catch (err) { logger.error('Verify send error', { error: err.message }); }
 }
 
-router.post('/register', validate(registerSchema), async (req, res) => {
+router.post('/register', validate(registerSchema), (req, res) => {
   try {
     const { email, password } = req.validated;
     const normalizedEmail = email.toLowerCase().trim();
@@ -114,11 +116,14 @@ router.post('/register', validate(registerSchema), async (req, res) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = bcrypt.hashSync(password, 10);
-    const result = db.prepare('INSERT INTO users (email, password_hash, email_verified) VALUES (?, ?, 1)').run(normalizedEmail, hash);
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const result = db.prepare('INSERT INTO users (email, password_hash, email_verified, verification_token) VALUES (?, ?, 0, ?)').run(normalizedEmail, hash, verifyToken);
+
+    setImmediate(() => sendVerificationEmail(normalizedEmail, verifyToken).catch(() => {}));
 
     const userData = db.prepare('SELECT jwt_version FROM users WHERE id = ?').get(result.lastInsertRowid);
     const token = jwt.sign({ userId: result.lastInsertRowid, version: userData.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: { id: result.lastInsertRowid, email: normalizedEmail, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, email_verified: 1 } });
+    res.status(201).json({ token, user: { id: result.lastInsertRowid, email: normalizedEmail, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, email_verified: 0 } });
   } catch (err) {
     logger.error('Register error', { error: err.message });
     res.status(500).json({ error: 'Server error' });
@@ -241,12 +246,7 @@ router.post('/resend-verification', async (req, res) => {
     if (user.email_verified) return res.status(400).json({ error: 'Email already verified' });
     const verifyToken = crypto.randomBytes(32).toString('hex');
     db.prepare('UPDATE users SET verification_token = ? WHERE id = ?').run(verifyToken, user.id);
-    try {
-      await sendVerificationEmail(normalizedEmail, verifyToken);
-    } catch (err) {
-      logger.error('Resend verify failed', { error: err.message });
-      return res.status(500).json({ error: 'Failed to send verification email. Try again.' });
-    }
+    setImmediate(() => sendVerificationEmail(normalizedEmail, verifyToken).catch(() => {}));
     res.json({ ok: true });
   } catch (err) {
     logger.error('Resend verification error', { error: err.message });
