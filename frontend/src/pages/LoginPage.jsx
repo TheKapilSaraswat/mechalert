@@ -68,21 +68,18 @@ export default function LoginPage() {
     setOtpVerifying(true);
     setOtpError('');
     try {
-      await fetch('/api/auth/verify-otp', {
+      const res = await fetch('/api/auth/verify-otp', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: unverifiedEmail, otp }),
       });
+      const data = await res.json();
+      if (!res.ok) throw { data };
       setOtpVerifying(false);
       setOtpSent(false);
       setUnverifiedEmail(null);
       setOtp('');
-      // Try logging in automatically after verification
-      try {
-        await login(email, password);
-        navigate('/dashboard');
-      } catch {
-        setError('Email verified! You can now sign in.');
-      }
+      await login(email, password);
+      navigate('/dashboard');
     } catch (err) {
       setOtpVerifying(false);
       if (err.data?.error?.includes('expired')) {
