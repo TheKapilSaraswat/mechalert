@@ -114,25 +114,11 @@ router.post('/register', validate(registerSchema), async (req, res) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = bcrypt.hashSync(password, 10);
-    const verifyToken = crypto.randomBytes(32).toString('hex');
-    const result = db.prepare('INSERT INTO users (email, password_hash, email_verified, verification_token) VALUES (?, ?, 0, ?)').run(normalizedEmail, hash, verifyToken);
-
-    let emailSent = false;
-    try {
-      await sendVerificationEmail(normalizedEmail, verifyToken);
-      emailSent = true;
-    } catch (err) {
-      logger.error('Register verify send failed, deleting user', { error: err.message });
-    }
-
-    if (!emailSent) {
-      db.prepare('DELETE FROM users WHERE id = ?').run(result.lastInsertRowid);
-      return res.status(400).json({ error: 'Could not send verification email. Check your email address and try again.' });
-    }
+    const result = db.prepare('INSERT INTO users (email, password_hash, email_verified) VALUES (?, ?, 1)').run(normalizedEmail, hash);
 
     const userData = db.prepare('SELECT jwt_version FROM users WHERE id = ?').get(result.lastInsertRowid);
     const token = jwt.sign({ userId: result.lastInsertRowid, version: userData.jwt_version }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: { id: result.lastInsertRowid, email: normalizedEmail, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, email_verified: 0 } });
+    res.status(201).json({ token, user: { id: result.lastInsertRowid, email: normalizedEmail, is_premium: 0, is_admin: 0, tier: 'free', digest_frequency: 'never', api_key: null, email_verified: 1 } });
   } catch (err) {
     logger.error('Register error', { error: err.message });
     res.status(500).json({ error: 'Server error' });
